@@ -45,58 +45,34 @@ const taskSchema = new Schema({
   subtasks: [subtaskSchema]
 });
 
-// Meeting Schema
 const meetingSchema = new Schema({
-  title: {
-    type: String,
-    required: true
-  },
-  description: {
-    type: String,
-    required: true
-  },
-  agenda: {
-    type: String
-  },
-  dateTime: {
-    type: Date,
-    required: true
-  },
-  duration: {
-    type: Number,
-    default: 60 // in minutes
-  },
+  title: { type: String, required: true },
+  description: { type: String, required: true },
+  agenda: { type: String },
+  dateTime: { type: Date, required: true },
+  duration: { type: Number, default: 60 },
   priority: {
     type: String,
     enum: ['Low', 'Medium', 'High', 'Urgent'],
     default: 'Medium'
   },
-  meetingType: {
-    type: String,
-    enum: ['General', 'Team Meeting', 'Client Meeting', 'Review', 'Training', 'Other'],
-    default: 'General'
-  },
-  location: {
-    type: String,
-    required: true
-  },
-  onlineLink: {
-    type: String // Only required if meeting is virtual
-  },
-  organizer: {
-    type: String, // Can link to userRef later
-    required: true
-  },
+  location: { type: String, required: true },
+  onlineLink: { type: String },
+
+  // 🔗 Organizer is now a Member ref
+  organizer: { type: Schema.Types.ObjectId, ref: 'Member', required: true },
+
+  // 🔗 Team reference
+  team: { type: Schema.Types.ObjectId, ref: 'Team', required: true },
+
   status: {
     type: String,
     enum: ['scheduled', 'completed', 'cancelled'],
     default: 'scheduled'
   },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  }
+  createdAt: { type: Date, default: Date.now }
 });
+
 
 // Head Schema
 const headSchema = new Schema({

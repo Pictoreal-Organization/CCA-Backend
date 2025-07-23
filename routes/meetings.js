@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const Meeting = require('../models/meetingSchema');
+const { Meeting } = require('../models/schema');
 
 // POST /schedulemeeting - Schedule a new meeting
 router.post('/schedulemeeting', async (req, res) => {
@@ -23,3 +23,5 @@ router.get('/upcomingmeetings', async (req, res) => {
     res.status(500).json({ error: 'Error fetching meetings' });
   }
 });
+
+module.exports = router;

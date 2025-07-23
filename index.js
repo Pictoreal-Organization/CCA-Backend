@@ -3,7 +3,10 @@ const app = express();
 const path = require('path');
 const PORT = process.env.PORT || 5000;
 const meetingRoutes = require('./routes/meetings');
+require('./db');
 
+
+app.use(express.json());
 app.use('/', meetingRoutes);
 
 
