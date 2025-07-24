@@ -7,7 +7,10 @@ const memberSchema = new Schema({
   name: String,
   rollNo: String,
   year: String,
-  division: String
+  division: String,
+  email: { type: String, unique: true },
+  phone: String,
+  team: [{ type: Schema.Types.ObjectId, ref: 'Team' }],
 });
 
 // Attendance Schema (optional, separate collection)
@@ -28,7 +31,7 @@ const subtaskSchema = new Schema({
   assignedMembers: [{ type: Schema.Types.ObjectId, ref: 'Member' }],
   status: {
     type: String,
-    enum: ['Pending', 'In Progress', 'Completed'],
+    enum: ['Pending', 'Completed'],
     default: 'Pending'
   }
 });
@@ -37,10 +40,12 @@ const subtaskSchema = new Schema({
 const taskSchema = new Schema({
   description: String,
   deadline: Date,
+  startdate: Date,
+  team: { type: Schema.Types.ObjectId, ref: 'Team' },
   status: {
     type: String,
-    enum: ['Pending', 'In Progress', 'Completed'],
-    default: 'Pending'
+    enum: ['In Progress', 'Completed'],
+    default: 'In Progress'
   },
   subtasks: [subtaskSchema]
 });
