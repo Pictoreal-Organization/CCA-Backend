@@ -16,6 +16,7 @@ const taskRoutes = require('./routes/tasks.route');
 app.use(express.json());
 app.use('/meet', meetingRoutes);
 app.use('/task', taskRoutes);
+// app.use('/', taskRoutes);
 
 app.get('/', (req, res) => {
   console.log("Works");
