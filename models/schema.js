@@ -31,7 +31,7 @@ const subtaskSchema = new Schema({
   assignedMembers: [{ type: Schema.Types.ObjectId, ref: 'Member' }],
   status: {
     type: String,
-    enum: ['Pending', 'Completed'],
+    enum:  ['Pending', 'In Progress', 'Completed'],
     default: 'Pending'
   }
 });
@@ -44,8 +44,8 @@ const taskSchema = new Schema({
   team: { type: Schema.Types.ObjectId, ref: 'Team' },
   status: {
     type: String,
-    enum: ['In Progress', 'Completed'],
-    default: 'In Progress'
+    enum:  ['Pending', 'In Progress', 'Completed'],
+    default: 'Pending'
   },
   subtasks: [subtaskSchema]
 });
@@ -65,7 +65,7 @@ const meetingSchema = new Schema({
   onlineLink: { type: String },
 
   // 🔗 Organizer is now a Member ref
-  organizer: { type: Schema.Types.ObjectId, ref: 'Member', required: true },
+  organizer: { type: Schema.Types.ObjectId, ref: 'User', required: true },
 
   // 🔗 Team reference
   team: { type: Schema.Types.ObjectId, ref: 'Team', required: true },
