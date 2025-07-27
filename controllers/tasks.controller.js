@@ -26,7 +26,7 @@ exports.getTasksByTeam = async (req, res) => {
         const teamId = req.query.teamId || req.params.teamId;
         if (!teamId) return res.status(400).json({ error: 'teamId is required' });
 
-        const tasks = await Task.find({ team: teamId }).populate('subtasks.assignedMembers');
+        const tasks = await Task.find({ team: teamId });
         res.json(tasks);
     } catch (err) {
         console.error(err);
