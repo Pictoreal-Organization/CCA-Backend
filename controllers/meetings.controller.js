@@ -60,6 +60,22 @@ exports.getUpcomingMeetings = async (req, res) => {
   }
 };
 
+exports.getOngoingMeetings = async (req, res) => {
+  try {
+    const now = new Date();
+
+    const meetings = await Meeting.find({
+      dateTime: { $lte: now },
+      $expr: { $gte: [{ $add: ["$dateTime", { $multiply: ["$duration", 60000] }] }, now] }, // convert duration to ms
+      status: 'scheduled'
+    }).sort({ dateTime: 1 });
+
+    res.status(200).json(meetings);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch ongoing meetings' });
+  }
+};
+
 exports.getPastMeetings = async (req, res) => {
   try {
     const now = new Date();

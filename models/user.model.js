@@ -36,7 +36,7 @@ userSchema.methods.comparePassword = function (candidatePassword) {
 // Generate Access Token
 userSchema.methods.generateAccessToken = function () {
   return jwt.sign(
-    { id: this._id, role: this.role },
+    { id: this._id, role: this.role, email: this.email },
     process.env.JWT_SECRET,
     { expiresIn: '1h' }
   );
@@ -45,7 +45,7 @@ userSchema.methods.generateAccessToken = function () {
 // Generate Refresh Token
 userSchema.methods.generateRefreshToken = function () {
   return jwt.sign(
-    { id: this._id },
+    { id: this._id, role: this.role, email: this.email },
     process.env.JWT_REFRESH_SECRET,
     { expiresIn: '7d' }
   );

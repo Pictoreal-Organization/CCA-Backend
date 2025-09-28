@@ -32,7 +32,7 @@ exports.login = async (req, res) => {
     user.refreshToken = refreshToken;
     await user.save();
 
-    res.json({ accessToken, refreshToken });
+    res.json({ accessToken, refreshToken, role: user.role });
   } catch (err) {
     res.status(500).json({ msg: err.message });
   }

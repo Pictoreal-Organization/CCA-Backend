@@ -105,7 +105,7 @@ exports.adminCreateMember = async (req, res) => {
       username: user.username,
       email: user.email,
       teams: teamNames,
-      password: username
+      password: user.username
     });
 
   } catch (err) {
@@ -132,8 +132,8 @@ exports.adminCreateHead = async (req, res) => {
       username,
       email,
       role: 'Head',
-      password: randomPassword,
-      initialPassword: randomPassword,
+      password: username,
+      initialPassword: username,
       passwordChanged: false
     });
 
@@ -169,7 +169,7 @@ exports.adminCreateHead = async (req, res) => {
       username: user.username,
       email: user.email,
       teams: teamNames,
-      password: randomPassword
+      password: username
     });
 
   } catch (err) {

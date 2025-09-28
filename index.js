@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const morgan = require('morgan');
 const dotenv = require('dotenv');
 
 
@@ -11,6 +12,8 @@ const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 
+// Morgan middleware (logs every request)
+app.use(morgan("dev"));
 
 const meetingRoutes = require('./routes/meetings.route');
 const taskRoutes = require('./routes/tasks.route');

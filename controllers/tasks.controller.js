@@ -40,23 +40,21 @@ exports.getTasksByTeam = async (req, res) => {
   }
 };
 
-exports.getTasksByMember = async (req, res) => {
+exports.getTasksByUser = async (req, res) => {
   try {
-    const memberId = req.query.memberId;
-    if (!memberId) return res.status(400).json({ error: 'memberId is required' });
-
-    const member = await Member.findById(memberId);
-    if (!member) return res.status(404).json({ error: 'Member not found' });
+    const userId = req.params.userId; // <-- use user ID here
+    if (!userId) return res.status(400).json({ error: 'userId is required' });
 
     const tasks = await Task.find({
-      'subtasks.assignedTo': memberId
+      'subtasks.assignedTo': userId
     }).populate('team').populate('subtasks.assignedTo');
 
     res.status(200).json(tasks);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch member tasks' });
+    res.status(500).json({ error: 'Failed to fetch user tasks' });
   }
 };
+
 
 exports.getTasksByStatus = async (req, res) => {
   try {

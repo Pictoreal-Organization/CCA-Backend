@@ -1,14 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const tasksController = require('../controllers/tasks.controller');
+const { authMiddleware, adminOrHeadOnly } = require('../middlewares/auth.middleware'); 
 
-router.get('/', tasksController.getAllTasks);
-router.get('/:id', tasksController.getTaskById);
-router.get('/team/:teamId/tasks', tasksController.getTasksByTeam);
-router.get('/member/:memberId/tasks', tasksController.getTasksByMember);
-router.get('/status/:status/tasks', tasksController.getTasksByStatus);
-router.post('/create', tasksController.createTask);
-router.put('/update', tasksController.updateTask);
-router.delete('/delete', tasksController.deleteTask);
+router.get('/', authMiddleware, tasksController.getAllTasks);
+router.get('/team/:teamId', authMiddleware, tasksController.getTasksByTeam);
+router.get('/user/:userId', authMiddleware, tasksController.getTasksByUser);
+router.get('/status/:status', authMiddleware, tasksController.getTasksByStatus);
+router.get('/:id', authMiddleware, tasksController.getTaskById);
+router.post('/create', authMiddleware, adminOrHeadOnly, tasksController.createTask);
+router.put('/update', authMiddleware, tasksController.updateTask);
+router.delete('/delete', authMiddleware, tasksController.deleteTask);
 
 module.exports = router;
