@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
-const { User, Member, Head, Team, Meeting, Task } = require('../models/index');
+const { User, Team, Meeting, Task } = require('../models/index');
 const bcrypt = require('bcrypt');
 
 exports.createAdmin = async (req, res) => {
@@ -56,165 +56,265 @@ exports.adminCreateTeam = async (req, res) => {
   }
 };
 
+// exports.adminCreateMember = async (req, res) => {
+//   try {
+//     const { username, email, teamNames } = req.body; // pass team names
+
+//     if (!username || !email || !Array.isArray(teamNames) || teamNames.length === 0)
+//       return res.status(400).json({ msg: "Username, email, and teamNames are required" });
+
+//     const existingUser = await User.findOne({ email });
+//     if (existingUser) return res.status(400).json({ msg: "User already exists" });
+
+//     // Create User
+//     const user = new User({
+//       username,
+//       email,
+//       role: 'Member',
+//       password: username,
+//       initialPassword: username,
+//       passwordChanged: false
+//     });
+//     await user.save();
+
+//     // Find teams by name
+//     const teams = await Team.find({ name: { $in: teamNames } });
+//     if (!teams.length) return res.status(404).json({ msg: "No matching teams found" });
+
+//     const teamIds = teams.map(t => t._id);
+
+//     // Create Member document
+//     const member = new Member({
+//       name: username,
+//       email,
+//       team: teamIds
+//     });
+//     await member.save();
+
+//     // Update User reference
+//     user.memberRef = member._id;
+//     await user.save();
+
+//     // Push Member into teams
+//     await Team.updateMany({ _id: { $in: teamIds } }, { $push: { members: member._id } });
+
+//     res.status(201).json({
+//       msg: "Member created successfully",
+//       userId: user._id,
+//       memberId: member._id,
+//       username: user.username,
+//       email: user.email,
+//       teams: teamNames,
+//       password: user.username
+//     });
+
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// };
+
 exports.adminCreateMember = async (req, res) => {
   try {
-    const { username, email, teamNames } = req.body; // pass team names
+    const { username, email, teamIds } = req.body;
 
-    if (!username || !email || !Array.isArray(teamNames) || teamNames.length === 0)
-      return res.status(400).json({ msg: "Username, email, and teamNames are required" });
+    if (!username || !email || !Array.isArray(teamIds) || teamIds.length === 0)
+      return res.status(400).json({ msg: "Username, email, and teamIds are required" });
 
     const existingUser = await User.findOne({ email });
     if (existingUser) return res.status(400).json({ msg: "User already exists" });
 
-    // Create User
+    // Create Member User
     const user = new User({
       username,
       email,
       role: 'Member',
       password: username,
       initialPassword: username,
-      passwordChanged: false
-    });
-    await user.save();
-
-    // Find teams by name
-    const teams = await Team.find({ name: { $in: teamNames } });
-    if (!teams.length) return res.status(404).json({ msg: "No matching teams found" });
-
-    const teamIds = teams.map(t => t._id);
-
-    // Create Member document
-    const member = new Member({
-      name: username,
-      email,
+      passwordChanged: false,
       team: teamIds
     });
-    await member.save();
 
-    // Update User reference
-    user.memberRef = member._id;
     await user.save();
 
-    // Push Member into teams
-    await Team.updateMany({ _id: { $in: teamIds } }, { $push: { members: member._id } });
+    // Push user into each team's members array
+    await Team.updateMany(
+      { _id: { $in: teamIds } },
+      { $addToSet: { members: user._id } } // $addToSet avoids duplicates
+    );
 
     res.status(201).json({
       msg: "Member created successfully",
       userId: user._id,
-      memberId: member._id,
       username: user.username,
       email: user.email,
-      teams: teamNames,
-      password: user.username
+      teams: teamIds,
+      password: username
     });
-
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
 
+// exports.adminCreateHead = async (req, res) => {
+//   try {
+//     const { username, email, teamNames } = req.body; // now passing names instead of IDs
+
+//     if (!username || !email || !Array.isArray(teamNames) || teamNames.length === 0)
+//       return res.status(400).json({ msg: "Username, email, and teamNames are required" });
+
+//     const existingUser = await User.findOne({ email });
+//     if (existingUser) return res.status(400).json({ msg: "User already exists" });
+
+//     // Generate random password
+//     const randomPassword = crypto.randomBytes(6).toString('hex');
+
+//     // Create User
+//     const user = new User({
+//       username,
+//       email,
+//       role: 'Head',
+//       password: username,
+//       initialPassword: username,
+//       passwordChanged: false
+//     });
+
+//     await user.save();
+
+//     // Find Teams by names
+//     const teams = await Team.find({ name: { $in: teamNames } });
+//     if (!teams.length) return res.status(404).json({ msg: "No matching teams found" });
+
+//     const teamIds = teams.map(t => t._id);
+
+//     // Create Head document
+//     const head = new Head({
+//       name: username, 
+//       team: teamIds
+//     });
+//     await head.save();
+
+//     // Update User to reference Head
+//     user.headRef = head._id;
+//     await user.save();
+
+//     // Push Head into Teams
+//     await Team.updateMany(
+//       { _id: { $in: teamIds } },
+//       { $push: { heads: head._id } }
+//     );
+
+//     res.status(201).json({
+//       msg: "Head created successfully",
+//       userId: user._id,
+//       headId: head._id,
+//       username: user.username,
+//       email: user.email,
+//       teams: teamNames,
+//       password: username
+//     });
+
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// };
+
 exports.adminCreateHead = async (req, res) => {
   try {
-    const { username, email, teamNames } = req.body; // now passing names instead of IDs
+    const { username, email, teamIds } = req.body;
 
-    if (!username || !email || !Array.isArray(teamNames) || teamNames.length === 0)
-      return res.status(400).json({ msg: "Username, email, and teamNames are required" });
+    if (!username || !email || !Array.isArray(teamIds) || teamIds.length === 0)
+      return res.status(400).json({ msg: "Username, email, and teamIds are required" });
 
     const existingUser = await User.findOne({ email });
     if (existingUser) return res.status(400).json({ msg: "User already exists" });
 
-    // Generate random password
-    const randomPassword = crypto.randomBytes(6).toString('hex');
-
-    // Create User
+    // Create Head User
     const user = new User({
       username,
       email,
       role: 'Head',
       password: username,
       initialPassword: username,
-      passwordChanged: false
-    });
-
-    await user.save();
-
-    // Find Teams by names
-    const teams = await Team.find({ name: { $in: teamNames } });
-    if (!teams.length) return res.status(404).json({ msg: "No matching teams found" });
-
-    const teamIds = teams.map(t => t._id);
-
-    // Create Head document
-    const head = new Head({
-      name: username, 
+      passwordChanged: false,
       team: teamIds
     });
-    await head.save();
 
-    // Update User to reference Head
-    user.headRef = head._id;
     await user.save();
 
-    // Push Head into Teams
+    // Push user into each team's heads array
     await Team.updateMany(
       { _id: { $in: teamIds } },
-      { $push: { heads: head._id } }
+      { $addToSet: { heads: user._id } } // $addToSet avoids duplicates
     );
 
     res.status(201).json({
       msg: "Head created successfully",
       userId: user._id,
-      headId: head._id,
       username: user.username,
       email: user.email,
-      teams: teamNames,
+      teams: teamIds,
       password: username
     });
-
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-// ----------------------
-// Delete Member
-// ----------------------
-exports.deleteMember = async (req, res) => {
+
+
+// // ----------------------
+// // Delete Member
+// // ----------------------
+// exports.deleteMember = async (req, res) => {
+//   try {
+//     const { memberId } = req.params;
+//     const member = await Member.findByIdAndDelete(memberId);
+//     if (!member) return res.status(404).json({ msg: "Member not found" });
+
+//     // Remove reference from User
+//     await User.findOneAndUpdate({ memberRef: memberId }, { memberRef: null });
+
+//     res.json({ msg: "Member deleted successfully" });
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// };
+
+// // ----------------------
+// // Delete Head
+// // ----------------------
+// exports.deleteHead = async (req, res) => {
+//   try {
+//     const { headId } = req.params;
+//     const head = await Head.findByIdAndDelete(headId);
+//     if (!head) return res.status(404).json({ msg: "Head not found" });
+
+//     // Remove reference from User
+//     await User.findOneAndUpdate({ headRef: headId }, { headRef: null });
+
+//     // Remove head from teams
+//     await Team.updateMany({ head: headId }, { head: null });
+
+//     res.json({ msg: "Head deleted successfully" });
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// };
+
+exports.deleteUser = async (req, res) => {
   try {
-    const { memberId } = req.params;
-    const member = await Member.findByIdAndDelete(memberId);
-    if (!member) return res.status(404).json({ msg: "Member not found" });
+    const { userId } = req.params;
+    const user = await User.findByIdAndDelete(userId);
 
-    // Remove reference from User
-    await User.findOneAndUpdate({ memberRef: memberId }, { memberRef: null });
+    if (!user) return res.status(404).json({ msg: "User not found" });
 
-    res.json({ msg: "Member deleted successfully" });
+    res.json({ msg: "User deleted successfully" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-// ----------------------
-// Delete Head
-// ----------------------
-exports.deleteHead = async (req, res) => {
-  try {
-    const { headId } = req.params;
-    const head = await Head.findByIdAndDelete(headId);
-    if (!head) return res.status(404).json({ msg: "Head not found" });
-
-    // Remove reference from User
-    await User.findOneAndUpdate({ headRef: headId }, { headRef: null });
-
-    // Remove head from teams
-    await Team.updateMany({ head: headId }, { head: null });
-
-    res.json({ msg: "Head deleted successfully" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
 
 // ----------------------
 // Update Head of Team
@@ -241,7 +341,7 @@ exports.updateTeamHead = async (req, res) => {
 // ----------------------
 exports.getAllMembers = async (req, res) => {
   try {
-    const members = await Member.find().populate('team');
+    const members = await User.find({ role: 'Member' }).populate('team');
     res.json(members);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -253,7 +353,7 @@ exports.getAllMembers = async (req, res) => {
 // ----------------------
 exports.getAllHeads = async (req, res) => {
   try {
-    const heads = await Head.find().populate('team');
+    const heads = await User.find({ role: 'Head' }).populate('team');
     res.json(heads);
   } catch (err) {
     res.status(500).json({ error: err.message });

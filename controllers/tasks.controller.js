@@ -1,4 +1,4 @@
-const { Task, Member, Team } = require('../models/index');
+const { Task, Team, User } = require('../models/index');
 
 exports.getAllTasks = async (req, res) => {
   try {

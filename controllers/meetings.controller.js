@@ -15,8 +15,11 @@ exports.createMeeting = async (req, res) => {
       teamId
     } = req.body;
 
-    if (!title || !description || !dateTime || !location || !teamId) {
+    if (!title || !description || !dateTime || !location) {
       return res.status(400).json({ msg: "Title, description, dateTime, location, and teamId are required" });
+    }
+    if (location === 'online' && !onlineLink) {
+      return res.status(400).json({ msg: "Online link is required for online meetings" });
     }
 
     const meeting = new Meeting({
@@ -42,7 +45,7 @@ exports.createMeeting = async (req, res) => {
 
 exports.getAllMeetings = async (req, res) => {
   try {
-    const meetings = await Meeting.find();
+    const meetings = await Meeting.find().sort({ dateTime: 1 });
     res.status(200).json(meetings);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch meetings' });
@@ -60,30 +63,18 @@ exports.getUpcomingMeetings = async (req, res) => {
   }
 };
 
-exports.getOngoingMeetings = async (req, res) => {
+// Get meetings by status
+exports.getMeetingsByStatus = async (req, res) => {
   try {
-    const now = new Date();
+    const { status } = req.params; // pass status in URL
+    if (!['scheduled', 'ongoing', 'completed', 'cancelled'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status value' });
+    }
 
-    const meetings = await Meeting.find({
-      dateTime: { $lte: now },
-      $expr: { $gte: [{ $add: ["$dateTime", { $multiply: ["$duration", 60000] }] }, now] }, // convert duration to ms
-      status: 'scheduled'
-    }).sort({ dateTime: 1 });
-
+    const meetings = await Meeting.find({ status }).sort({ dateTime: 1 });
     res.status(200).json(meetings);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch ongoing meetings' });
-  }
-};
-
-exports.getPastMeetings = async (req, res) => {
-  try {
-    const now = new Date();
-    const meetings = await Meeting.find({ dateTime: { $lt: now } })
-      .sort({ dateTime: -1 });
-    res.status(200).json(meetings);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch past meetings' });
+    res.status(500).json({ error: 'Failed to fetch meetings by status' });
   }
 };
 
@@ -96,5 +87,22 @@ exports.getMeetingById = async (req, res) => {
     res.status(200).json(meeting);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch meeting' });
+  }
+};
+
+// ✅ Get meetings eligible for attendance marking
+exports.getMeetingsForAttendance = async (req, res) => {
+  try {
+    const now = new Date();
+
+    // Completed meetings in last 2 days
+    const meetings = await Meeting.find({
+      status: 'completed',
+      dateTime: { $gte: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000) } 
+    });
+
+    res.status(200).json(meetings);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 };

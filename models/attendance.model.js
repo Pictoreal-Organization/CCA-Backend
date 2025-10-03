@@ -4,10 +4,10 @@ const Schema = mongoose.Schema;
 const attendanceSchema = new Schema({
   status: {
     type: String,
-    enum: ['Present', 'Absent', 'Excused'],
-    default: 'Absent'
+    enum: ['present', 'absent', 'excused'],
+    default: 'absent'
   },
-  member: { type: Schema.Types.ObjectId, ref: 'Member' },
+  member: { type: Schema.Types.ObjectId, ref: 'User' },
   meeting: { type: Schema.Types.ObjectId, ref: 'Meeting' }
 });
 

@@ -20,10 +20,11 @@ const meetingSchema = new Schema({
   
   status: {
     type: String,
-    enum: ['scheduled', 'completed', 'cancelled'],
+    enum: ['scheduled', 'ongoing', 'completed', 'cancelled'],
     default: 'scheduled'
   },
   createdAt: { type: Date, default: Date.now }
 });
 
 module.exports = mongoose.model('Meeting', meetingSchema);
+

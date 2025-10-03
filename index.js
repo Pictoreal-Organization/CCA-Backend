@@ -7,6 +7,8 @@ const dotenv = require('dotenv');
 dotenv.config();
 require('./db');
 
+require('./cron/meeting.cron');
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -20,6 +22,7 @@ const taskRoutes = require('./routes/tasks.route');
 const authRoutes = require('./routes/auth.route');
 const userRoutes = require('./routes/user.route');
 const adminRoutes = require('./routes/admin.route');
+const attendanceRoutes = require('./routes/attendance.route');
 
 app.use(express.json());
 app.use('/api/meetings', meetingRoutes);
@@ -27,6 +30,7 @@ app.use('/api/tasks', taskRoutes);
 app.use('/api/auth/', authRoutes);
 app.use('/api/user/', userRoutes);
 app.use('/api/admin/', adminRoutes);
+app.use('/api/attendance/', attendanceRoutes);
 
 app.get('/', (req, res) => {
   console.log("Works");

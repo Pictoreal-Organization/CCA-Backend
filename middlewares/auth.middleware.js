@@ -17,7 +17,10 @@ const authMiddleware = async (req, res, next) => {
     req.user = user; // attach user info to request
     next();
   } catch (err) {
-    res.status(401).json({ msg: 'Invalid or expired token' });
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({ msg: 'Token expired, please login again' });
+    }
+    res.status(401).json({ msg: 'Invalid token' });
   }
 };
 
@@ -35,4 +38,11 @@ const adminOrHeadOnly = (req, res, next) => {
   next();
 };
 
-module.exports = { authMiddleware, adminOnly, adminOrHeadOnly };
+const allowRoles = (...roles) => (req, res, next) => {
+  if (!roles.includes(req.user.role)) {
+    return res.status(403).json({ msg: 'Access denied' });
+  }
+  next();
+};
+
+module.exports = { authMiddleware, adminOnly, adminOrHeadOnly, allowRoles };

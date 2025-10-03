@@ -10,30 +10,38 @@ const userSchema = new Schema({
   role: { type: String, enum: ['Member', 'Head', 'Admin'], default: 'Member' },
   refreshToken: String,
 
-  // First-time password handling
+  // Profile info
+  name: String,
+  rollNo: String,      // for members
+  year: String,
+  division: String,
+  phone: String,
+
+  // Relationships
+  team: [{ type: Schema.Types.ObjectId, ref: 'Team' }],
+
+  // Tracking
+  tasksAssigned: [{ type: Schema.Types.ObjectId, ref: 'Task' }],
+  eventsScheduled: [{ type: Schema.Types.ObjectId, ref: 'Meeting' }],
+
+  // Security
   initialPassword: { type: String },  
   passwordChanged: { type: Boolean, default: false },
-
-  // OTP for password reset
   otp: String,
   otpExpiry: Date
 }, { timestamps: true });
 
-
 // Hash password before saving
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();
-  const saltRounds = 10;
-  this.password = await bcrypt.hash(this.password, saltRounds);
+  this.password = await bcrypt.hash(this.password, 10);
   next();
 });
 
-// Compare password
 userSchema.methods.comparePassword = function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
-// Generate Access Token
 userSchema.methods.generateAccessToken = function () {
   return jwt.sign(
     { id: this._id, role: this.role, email: this.email },
@@ -42,7 +50,6 @@ userSchema.methods.generateAccessToken = function () {
   );
 };
 
-// Generate Refresh Token
 userSchema.methods.generateRefreshToken = function () {
   return jwt.sign(
     { id: this._id, role: this.role, email: this.email },

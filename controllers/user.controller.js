@@ -15,7 +15,7 @@ exports.requestPasswordChange = async (req, res) => {
     // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     user.otp = otp;
-    user.otpExpiry = Date.now() + 10 * 60 * 1000; // 10 minutes validity
+    user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
     await user.save();
 
@@ -28,12 +28,23 @@ exports.requestPasswordChange = async (req, res) => {
       }
     });
 
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: user.email,
-      subject: "OTP for Password Change",
-      text: `Your OTP for password change is: ${otp}`
-    });
+    // await transporter.sendMail({
+    //   from: process.env.EMAIL_USER,
+    //   to: user.email,
+    //   subject: "OTP for Password Change",
+    //   text: `Your OTP for password change is: ${otp}`
+    // });
+
+    try {
+      await transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: user.email,
+        subject: "OTP for Password Change",
+        text: `Your OTP for password change is: ${otp}`
+      });
+    } catch (err) {
+      return res.status(500).json({ msg: "Failed to send OTP email" });
+    }    
 
     res.json({ msg: "OTP sent to email" });
   } catch (err) {
@@ -51,7 +62,7 @@ exports.changePasswordWithOTP = async (req, res) => {
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ msg: "User not found" });
 
-    if (user.otp !== otp || Date.now() > user.otpExpiry) {
+    if (user.otp !== otp || new Date() > user.otpExpiry) {
       return res.status(400).json({ msg: "Invalid or expired OTP" });
     }
 
@@ -65,6 +76,34 @@ exports.changePasswordWithOTP = async (req, res) => {
     await user.save();
 
     res.json({ msg: "Password changed successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ----------------------
+// Update User Profile
+// ----------------------
+exports.updateUserProfile = async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user) return res.status(404).json({ msg: "User not found" });
+
+    if (user.role !== "Member") {
+      return res.status(403).json({ msg: "Only Members can update these fields" });
+    }
+    const { name, rollNo, year, division, phone } = req.body;
+
+    // Update allowed fields
+    if (name) user.name = name;
+    if (rollNo) user.rollNo = rollNo;
+    if (year) user.year = year;
+    if (division) user.division = division;
+    if (phone) user.phone = phone;
+
+    await user.save();
+
+    res.json({ msg: "Profile updated successfully", user });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
