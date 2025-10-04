@@ -12,7 +12,7 @@ exports.createMeeting = async (req, res) => {
       priority,
       location,
       onlineLink,
-      teamId
+      team
     } = req.body;
 
     if (!title || !description || !dateTime || !location) {
@@ -32,7 +32,7 @@ exports.createMeeting = async (req, res) => {
       location,
       onlineLink,
       organizer: req.user._id, // automatically the head or admin creating it
-      team: teamId
+      team
     });
 
     await meeting.save();
@@ -90,7 +90,7 @@ exports.getMeetingById = async (req, res) => {
   }
 };
 
-// ✅ Get meetings eligible for attendance marking
+//  Get meetings eligible for attendance marking
 exports.getMeetingsForAttendance = async (req, res) => {
   try {
     const now = new Date();
