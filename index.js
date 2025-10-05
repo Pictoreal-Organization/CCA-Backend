@@ -25,8 +25,8 @@ const adminRoutes = require('./routes/admin.route');
 const attendanceRoutes = require('./routes/attendance.route');
 
 app.use(express.json());
-app.use('/api/meetings', meetingRoutes);
-app.use('/api/tasks', taskRoutes);
+app.use('/api/meetings/', meetingRoutes);
+app.use('/api/tasks/', taskRoutes);
 app.use('/api/auth/', authRoutes);
 app.use('/api/user/', userRoutes);
 app.use('/api/admin/', adminRoutes);

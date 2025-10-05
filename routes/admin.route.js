@@ -7,7 +7,6 @@ const { authMiddleware, adminOnly } = require('../middlewares/auth.middleware');
 // Temporary route for development only
 router.post('/create-admin', adminController.createAdmin);
 
-
 router.post('/create-team', authMiddleware, adminOnly, adminController.adminCreateTeam);
 router.post('/create-member', authMiddleware, adminOnly, adminController.adminCreateMember);
 router.post('/create-head', authMiddleware, adminOnly, adminController.adminCreateHead);
@@ -21,6 +20,7 @@ router.put('/team/:teamId/head', authMiddleware, adminOnly, adminController.upda
 router.get('/members', authMiddleware, adminOnly, adminController.getAllMembers);
 router.get('/heads', authMiddleware, adminOnly, adminController.getAllHeads);
 router.get('/teams', authMiddleware, adminOnly, adminController.getAllTeams);
+router.get('/visible-teams', authMiddleware, adminOnly, adminController.getVisibleTeams);
 router.get('/meetings', authMiddleware, adminOnly, adminController.getAllMeetings);
 router.get('/tasks', authMiddleware, adminOnly, adminController.getAllTasks);
 router.get('/users', authMiddleware, adminOnly, adminController.getAllUsersForAdmin);
