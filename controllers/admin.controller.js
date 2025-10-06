@@ -234,12 +234,15 @@ exports.getAllTasks = async (req, res) => {
 
 exports.getAllUsersForAdmin = async (req, res) => {
   try {
-    const users = await User.find({}, 'username email role initialPassword passwordChanged');
+    const users = await User.find({}, 'username name email role year division initialPassword passwordChanged');
     const formatted = users.map(u => ({
       username: u.username,
+      name: u.name,
       email: u.email,
       role: u.role,
-      password: u.passwordChanged ? "Hidden" : u.initialPassword
+      password: u.passwordChanged ? "Hidden" : u.initialPassword,
+      year: u.year,
+      division: u.division
     }));
     res.json(formatted);
   } catch (err) {
