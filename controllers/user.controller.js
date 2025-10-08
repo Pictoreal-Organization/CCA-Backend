@@ -2,9 +2,6 @@ const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const { User } = require('../models/index'); // User model
 
-// ----------------------
-// Request Password Change (sends OTP to email)
-// ----------------------
 exports.requestPasswordChange = async (req, res) => {
   try {
     const { email } = req.body;
@@ -52,9 +49,6 @@ exports.requestPasswordChange = async (req, res) => {
   }
 };
 
-// ----------------------
-// Verify OTP and Change Password
-// ----------------------
 exports.changePasswordWithOTP = async (req, res) => {
   try {
     const { email, otp, newPassword } = req.body;
@@ -81,9 +75,6 @@ exports.changePasswordWithOTP = async (req, res) => {
   }
 };
 
-// ----------------------
-// Update User Profile
-// ----------------------
 exports.updateUserProfile = async (req, res) => {
   try {
     const user = req.user;
@@ -104,6 +95,15 @@ exports.updateUserProfile = async (req, res) => {
     await user.save();
 
     res.json({ msg: "Profile updated successfully", user });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.getAllUsers = async (req, res) => {
+  try {
+    const users = await User.find({}, 'username name email role year division initialPassword');
+    res.json(users);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
