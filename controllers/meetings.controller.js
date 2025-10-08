@@ -15,11 +15,18 @@ exports.createMeeting = async (req, res) => {
       team
     } = req.body;
 
-    if (!title || !description || !dateTime || !location) {
-      return res.status(400).json({ msg: "Title, description, dateTime, location, and teamId are required" });
+    if (!title || !description || !dateTime) {
+      return res.status(400).json({ msg: "Title, description, and dateTime are required" });
     }
-    if (location === 'online' && !onlineLink) {
-      return res.status(400).json({ msg: "Online link is required for online meetings" });
+
+    // Online meeting
+    if ((!location || location.trim() === '') && (!onlineLink || onlineLink.trim() === '')) {
+      return res.status(400).json({ msg: "Provide either a location or an online link" });
+    }
+
+    // Prevent both being filled
+    if (location && onlineLink) {
+      return res.status(400).json({ msg: "Provide only location or online link, not both" });
     }
 
     const meeting = new Meeting({
@@ -29,8 +36,8 @@ exports.createMeeting = async (req, res) => {
       dateTime,
       duration,
       priority,
-      location,
-      onlineLink,
+      location: location || null,
+      onlineLink: onlineLink || null,
       organizer: req.user._id, // automatically the head or admin creating it
       team
     });

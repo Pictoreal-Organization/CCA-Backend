@@ -12,8 +12,9 @@ const meetingSchema = new Schema({
     enum: ['Low', 'Medium', 'High', 'Urgent'],
     default: 'Medium'
   },
-  location: { type: String, required: true },
-  onlineLink: { type: String },
+  location: { type: String, required: function() { return !this.onlineLink; }, default: null },
+  onlineLink: { type: String, default: null, required: function() { return !this.location; } },
+
 
   organizer: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   team: { type: Schema.Types.ObjectId, ref: 'Team', default: null }, // optional
