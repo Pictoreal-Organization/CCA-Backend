@@ -10,12 +10,13 @@ require('./db');
 require('./cron/meeting.cron');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 app.use(cors());
 
 // Morgan middleware (logs every request)
 app.use(morgan("dev"));
+app.use(express.json());
 
 const meetingRoutes = require('./routes/meetings.route');
 const taskRoutes = require('./routes/tasks.route');
@@ -24,7 +25,6 @@ const userRoutes = require('./routes/user.route');
 const adminRoutes = require('./routes/admin.route');
 const attendanceRoutes = require('./routes/attendance.route');
 
-app.use(express.json());
 app.use('/api/meetings/', meetingRoutes);
 app.use('/api/tasks/', taskRoutes);
 app.use('/api/auth/', authRoutes);

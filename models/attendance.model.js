@@ -1,14 +1,22 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
+// Simplified Schema with only present and absent arrays
 const attendanceSchema = new Schema({
-  status: {
-    type: String,
-    enum: ['present', 'absent', 'excused'],
-    default: 'absent'
+  meeting: {
+    type: Schema.Types.ObjectId,
+    ref: 'Meeting',
+    required: true,
+    unique: true
   },
-  member: { type: Schema.Types.ObjectId, ref: 'User' },
-  meeting: { type: Schema.Types.ObjectId, ref: 'Meeting' }
-});
+  presentMembers: [{
+    type: Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  absentMembers: [{
+    type: Schema.Types.ObjectId,
+    ref: 'User'
+  }]
+}, { timestamps: true });
 
 module.exports = mongoose.model('Attendance', attendanceSchema);

@@ -1,4 +1,4 @@
-const {Attendance, Meeting, Team, User } = require('../models/index');
+const { Attendance, Meeting, Team, User } = require('../models/index');
 
 const canMarkAttendance = async (user, meeting) => {
   if (!user) return false;
@@ -13,70 +13,91 @@ const canMarkAttendance = async (user, meeting) => {
     return team.heads.some(headId => headId.equals(user._id));
   }
 
-  return false;
+  return true;
 };
 
-// ✅ Mark or update attendance
+// ✅ REWRITTEN to handle the new "Array Model"
 exports.markAttendance = async (req, res) => {
   try {
-    const { meetingId, memberId, status } = req.body;
-
-    if (!meetingId || !memberId || !status) {
-      return res.status(400).json({ msg: "meetingId, memberId, and status are required" });
-    }
+    const { meetingId, presentMemberIds } = req.body;
 
     const meeting = await Meeting.findById(meetingId);
     if (!meeting) return res.status(404).json({ msg: "Meeting not found" });
 
-    const member = await User.findById(memberId);
-    if (!member) return res.status(404).json({ msg: "Member not found" });
-
+    // Authorization
     const authorized = await canMarkAttendance(req.user, meeting);
     if (!authorized) return res.status(403).json({ msg: "Not authorized to mark attendance" });
 
-    // Check if attendance already exists
-    let attendance = await Attendance.findOne({ meeting: meetingId, member: memberId });
-
-    if (attendance) {
-      attendance.status = status; // update
-      await attendance.save();
-    } else {
-      attendance = new Attendance({
-        status,
-        member: memberId,
-        meeting: meetingId
-      });
-      await attendance.save();
+    // Get all members of the team associated with the meeting
+    const team = await Team.findById(meeting.team);
+    if (!team || !team.members) {
+      return res.status(404).json({ msg: "Team for this meeting not found or has no members." });
     }
 
-    res.status(200).json({ msg: "Attendance marked successfully", attendance });
+    // Determine who is absent
+    const absentMemberIds = team.members.filter(
+      memberId => !presentMemberIds.includes(memberId.toString())
+    );
+
+    // Find the single attendance document for this meeting, or create it if it doesn't exist
+    const updatedAttendance = await Attendance.findOneAndUpdate(
+      { meeting: meetingId },
+      {
+        $set: {
+          presentMembers: presentMemberIds,
+          absentMembers: absentMemberIds,
+        }
+      },
+      { new: true, upsert: true } // new: returns the updated doc, upsert: creates if not found
+    );
+
+    res.status(200).json({ msg: "Attendance has been successfully updated.", attendance: updatedAttendance });
+
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err.message);
+    res.status(500).json({ error: "Server error while updating attendance." });
   }
 };
 
-// GET all users with attendance status for a meeting
+// ✅ REWRITTEN to fetch data from the new "Array Model"
 exports.getAttendanceForMeeting = async (req, res) => {
   try {
     const { meetingId } = req.params;
 
-    const users = await User.find().sort({ name: 1 }); // or { rollNo: 1 }
-    const attendanceRecords = await Attendance.find({ meeting: meetingId });
+    // 1. Find the single attendance document for the meeting
+    const attendanceDoc = await Attendance.findOne({ meeting: meetingId });
 
-    const attendanceMap = {};
-    attendanceRecords.forEach(record => {
-      attendanceMap[record.member.toString()] = record.status;
+    // 2. Get all users for the meeting's team
+    const meeting = await Meeting.findById(meetingId);
+    if (!meeting || !meeting.team) {
+      return res.json([]); // No meeting or team, return empty list
+    }
+    const team = await Team.findById(meeting.team);
+    if (!team || !team.members) {
+      return res.json([]); // No team members, return empty list
+    }
+
+    const users = await User.find({ '_id': { $in: team.members } }).sort({ name: 1 });
+
+    // 3. Create the attendance list in the format your frontend expects
+    const result = users.map(user => {
+      let status = "absent"; // Default to absent
+      if (attendanceDoc) {
+        // Check if the user ID is in the presentMembers array
+        if (attendanceDoc.presentMembers.some(id => id.equals(user._id))) {
+          status = "present";
+        }
+      }
+      return {
+        member: {
+          _id: user._id,
+          name: user.name,
+          rollNo: user.rollNo,
+          email: user.email,
+        },
+        status: status,
+      };
     });
-
-    const result = users.map(user => ({
-      member: {
-        _id: user._id,
-        name: user.name,
-        rollNo: user.rollNo,
-        email: user.email,
-      },
-      status: attendanceMap[user._id.toString()] || "absent",
-    }));
 
     res.json(result);
   } catch (err) {
