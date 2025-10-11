@@ -5,7 +5,7 @@ const { authMiddleware } = require('../middlewares/auth.middleware');
 
 router.post('/request-password-change', authMiddleware, userController.requestPasswordChange);
 router.post('/change-password-otp', authMiddleware, userController.changePasswordWithOTP);
-router.post('/update-profile', authMiddleware, userController.updateUserProfile);
+router.put('/update-profile', authMiddleware, userController.updateUserProfile);
 router.get('/all', authMiddleware, userController.getAllUsers);
 
 module.exports = router;
