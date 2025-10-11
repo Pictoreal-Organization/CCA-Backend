@@ -80,9 +80,6 @@ exports.updateUserProfile = async (req, res) => {
     const user = req.user;
     if (!user) return res.status(404).json({ msg: "User not found" });
 
-    // if (user.role !== "Member") {
-    //   return res.status(403).json({ msg: "Only Members can update these fields" });
-    // }
     const { name, rollNo, year, division, phone } = req.body;
 
     // Update allowed fields
