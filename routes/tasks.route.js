@@ -12,5 +12,7 @@ router.post('/create', authMiddleware, adminOrHeadOnly, tasksController.createTa
 router.put('/update/:id', authMiddleware, tasksController.updateTask);
 router.delete('/delete', authMiddleware, tasksController.deleteTask);
 router.put('/:taskId/subtasks/:subtaskId/status', authMiddleware, tasksController.updateSubtask);
+router.get('/user/:userId/completed', authMiddleware, tasksController.getCompletedTasksByUser);
+
 
 module.exports = router;

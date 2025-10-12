@@ -76,3 +76,19 @@ exports.sendChangesSuggestedEmail = (subtask, member) => {
   `;
   sendEmail(member.email, subject, html);
 };
+
+exports.sendMainTaskCompletionEmail = (task, head, members) => {
+  const subject = `🎉 Task Completed: ${task.title}`;
+  const html = `
+    <h1>Task Completed: ${task.title}</h1>
+    <p>The main task "<strong>${task.title}</strong>" has been officially marked as completed by ${head.username}.</p>
+    <p>This task has now been moved to your profile history.</p>
+    <p>Thank you for your hard work and contribution!</p>
+    <br>
+    <p>- PICTOREAL</p>
+  `;
+
+  // Create a recipient list including the head and all involved members.
+  const recipientEmails = [head.email, ...members.map(m => m.email)];
+  sendEmail(recipientEmails.join(','), subject, html);
+};

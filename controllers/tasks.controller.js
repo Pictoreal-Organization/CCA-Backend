@@ -4,7 +4,7 @@ const emailService = require('../services/email.service');
 
 exports.getAllTasks = async (req, res) => {
   try {
-    const tasks = await Task.find()
+    const tasks = await Task.find({ status: { $ne: 'Completed' } })
       .populate('team')
       .populate('subtasks.assignedTo');
     res.status(200).json(tasks);
@@ -64,38 +64,42 @@ exports.getTasksByUser = async (req, res) => {
       return res.status(400).json({ error: 'userId is required' });
     }
 
-    // Convert the string userId to a MongoDB ObjectId for accurate matching
     const userObjectId = new mongoose.Types.ObjectId(userId);
 
     const tasks = await Task.aggregate([
-      // Stage 1: Find tasks where the user is assigned to at least one subtask
+      // ✅ ADD THIS STAGE: Only find tasks that are NOT completed.
+      {
+        $match: {
+          status: { $ne: 'Completed' }
+        }
+      },
+      // Stage 2: Find tasks where the user is assigned (no change here)
       {
         $match: {
           'subtasks.assignedTo': userObjectId
         }
       },
-      // Stage 2: Overwrite the 'subtasks' array with a filtered version
+      // Stage 3: Filter the subtasks to show only the user's (no change here)
       {
         $addFields: {
           subtasks: {
             $filter: {
-              input: '$subtasks', // The array to filter
-              as: 'subtask',      // A variable for each element in the array
-              cond: { $in: [userObjectId, '$$subtask.assignedTo'] } // The condition to meet
+              input: '$subtasks',
+              as: 'subtask',
+              cond: { $in: [userObjectId, '$$subtask.assignedTo'] }
             }
           }
         }
       }
     ]);
 
-    // After aggregation, you can manually populate the fields
-    // Mongoose can populate plain objects returned from an aggregation
+    // Populate the results (no change here)
     await Task.populate(tasks, { path: 'team' });
     await Task.populate(tasks, { path: 'subtasks.assignedTo' });
 
     res.status(200).json(tasks);
   } catch (err) {
-    console.error(err); // It's good practice to log the actual error
+    console.error(err);
     res.status(500).json({ error: 'Failed to fetch user tasks' });
   }
 };
@@ -162,13 +166,27 @@ exports.createTask = async (req, res) => {
 
 exports.updateTask = async (req, res) => {
   try {
-    const task = await Task.findByIdAndUpdate(req.params.id, req.body, { new: true })
-      .populate('team')
-      .populate('subtasks.assignedTo');
+    const updatedTask = await Task.findByIdAndUpdate(req.params.id, req.body, { new: true });
 
-    if (!task) return res.status(404).json({ message: 'Task not found' });
+    if (!updatedTask) return res.status(404).json({ message: 'Task not found' });
 
-    res.json(task);
+    // --- ✅ NEW EMAIL LOGIC ---
+    // If the task was just marked as completed, send the final email.
+    if (updatedTask.status === 'Completed') {
+      // Find all unique members involved in the task's subtasks.
+      const assignedUserIds = updatedTask.subtasks.flatMap(s => s.assignedTo);
+      const uniqueUserIds = [...new Set(assignedUserIds)];
+      const involvedMembers = await User.find({ '_id': { $in: uniqueUserIds } });
+      const headUser = await User.findById(req.user.id); // The head who completed the task.
+
+      if (involvedMembers.length > 0 && headUser) {
+        emailService.sendMainTaskCompletionEmail(updatedTask, headUser, involvedMembers);
+      }
+    }
+    // --- END EMAIL LOGIC ---
+
+    const populatedTask = await updatedTask.populate(['team', 'subtasks.assignedTo']);
+    res.json(populatedTask);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -246,5 +264,30 @@ exports.updateSubtask = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to update subtask' });
+  }
+};
+
+exports.getCompletedTasksByUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+
+    const tasks = await Task.find({
+      // Rule 1: The main task status must be 'Completed'
+      status: 'Completed',
+      // Rule 2: The user must be assigned to at least one subtask in this task
+      'subtasks.assignedTo': userId,
+    }).sort({ deadline: -1 }); // Sort by most recently completed
+
+    if (!tasks) {
+      return res.status(200).json([]); // Return empty array if no tasks found
+    }
+
+    res.status(200).json(tasks);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch completed tasks' });
   }
 };
