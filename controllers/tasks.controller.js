@@ -1,5 +1,6 @@
 const { Task, Team, User } = require('../models/index');
 const mongoose = require('mongoose');
+const emailService = require('../services/email.service');
 
 exports.getAllTasks = async (req, res) => {
   try {
@@ -141,6 +142,14 @@ exports.createTask = async (req, res) => {
 
     await task.save();
 
+    const assignedUserIds = req.body.subtasks.flatMap(s => s.assignedTo);
+    const uniqueUserIds = [...new Set(assignedUserIds)]; // Remove duplicates
+    const assignedUsers = await User.find({ '_id': { $in: uniqueUserIds } });
+    
+    if (assignedUsers.length > 0) {
+      emailService.sendTaskCreationEmail(task, assignedUsers);
+    }
+
     const populatedTask = await Task.findById(task._id)
       .populate('team')
       .populate('subtasks.assignedTo');
@@ -176,41 +185,35 @@ exports.deleteTask = async (req, res) => {
   }
 };
 
+// ✅ 3. Modify the updateSubtask function
 exports.updateSubtask = async (req, res) => {
   try {
     const { taskId, subtaskId } = req.params;
-    const { status, description } = req.body; // We'll always expect status and sometimes description
-    const { id, role } = req.user; // Get user's ID and role from authMiddleware
+    const { status, description } = req.body;
+    const { id, role, email: userEmail } = req.user;
 
-    // Find the task to check the subtask's current state
     const task = await Task.findOne({ _id: taskId, 'subtasks._id': subtaskId });
-    if (!task) {
-      return res.status(404).json({ error: 'Task or subtask not found' });
-    }
+    if (!task) return res.status(404).json({ error: 'Task or subtask not found' });
 
     const subtask = task.subtasks.id(subtaskId);
-    const isAssigned = subtask.assignedTo.some(assignedUserId => assignedUserId.equals(id));
 
-    // --- NEW VALIDATION LOGIC ---
-    // Rule 1: Member must provide description when completing a task.
+    // ✅ THIS IS THE FIX: Define originalStatus right here
+    const originalStatus = subtask.status;
+
+    // --- (All your existing validation logic stays here) ---
     if (role === 'Member' && status === 'Completed' && (!description || description.trim() === '')) {
       return res.status(400).json({ error: 'A completion description is required.' });
     }
-    
-    // Rule 2: Head must provide description (changes) when reverting a completed task.
-    if (role === 'Head' && status === 'Pending' && subtask.status === 'Completed' && (!description || description.trim() === '')) {
+    if (role === 'Head' && status === 'Pending' && originalStatus === 'Completed' && (!description || description.trim() === '')) {
       return res.status(400).json({ error: 'Please provide the required changes to the member.' });
     }
-    
-    // Security check: Only assigned members or heads can make changes.
+    const isAssigned = subtask.assignedTo.some(assignedUserId => assignedUserId.equals(id));
     if (role === 'Member' && !isAssigned) {
-      return res.status(403).json({ error: 'Forbidden: You are not assigned to this subtask.' });
+        return res.status(403).json({ error: 'Forbidden: You are not assigned to this subtask.' });
     }
-    
-    // --- DATABASE UPDATE ---
+
     const fieldsToUpdate = {};
     if (status) fieldsToUpdate['subtasks.$.status'] = status;
-    // Always update the description if it's provided.
     if (description !== undefined) fieldsToUpdate['subtasks.$.description'] = description;
 
     const updatedTask = await Task.findOneAndUpdate(
@@ -218,6 +221,25 @@ exports.updateSubtask = async (req, res) => {
       { $set: fieldsToUpdate },
       { new: true }
     ).populate('team').populate('subtasks.assignedTo');
+
+    // --- EMAIL LOGIC ---
+    const updatedSubtask = updatedTask.subtasks.id(subtaskId);
+    
+    // Scenario 1: Member completes a subtask
+    if (role === 'Member' && status === 'Completed' && originalStatus !== 'Completed') {
+      const member = await User.findById(id);
+      const headEmail = 'head.of.the.club@gmail.com'; // TODO: Replace with dynamic lookup
+      emailService.sendSubtaskCompletionEmail(updatedSubtask, member, headEmail);
+    }
+    
+    // Scenario 2: Head suggests changes
+    if (role === 'Head' && status === 'Pending' && originalStatus === 'Completed') {
+      const assignedMember = await User.findById(updatedSubtask.assignedTo[0]);
+      if (assignedMember) {
+        emailService.sendChangesSuggestedEmail(updatedSubtask, assignedMember);
+      }
+    }
+    // --- END EMAIL LOGIC ---
 
     res.status(200).json({ message: 'Subtask updated successfully', task: updatedTask });
 
