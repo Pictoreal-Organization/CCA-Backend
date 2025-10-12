@@ -16,7 +16,6 @@ const canMarkAttendance = async (user, meeting) => {
   return true;
 };
 
-// ✅ REWRITTEN to handle the new "Array Model"
 exports.markAttendance = async (req, res) => {
   try {
     const { meetingId, presentMemberIds } = req.body;
@@ -28,18 +27,17 @@ exports.markAttendance = async (req, res) => {
     const authorized = await canMarkAttendance(req.user, meeting);
     if (!authorized) return res.status(403).json({ msg: "Not authorized to mark attendance" });
 
-    // Get all members of the team associated with the meeting
-    const team = await Team.findById(meeting.team);
-    if (!team || !team.members) {
-      return res.status(404).json({ msg: "Team for this meeting not found or has no members." });
+    let absentMemberIds = [];
+
+    if (meeting.team) {
+      const team = await Team.findById(meeting.team);
+      if (team && team.members && team.members.length > 0) {
+        absentMemberIds = team.members
+          .filter(memberId => !presentMemberIds.includes(memberId.toString()));
+      }
     }
 
-    // Determine who is absent
-    const absentMemberIds = team.members.filter(
-      memberId => !presentMemberIds.includes(memberId.toString())
-    );
-
-    // Find the single attendance document for this meeting, or create it if it doesn't exist
+    // If no team, absentMemberIds will remain empty
     const updatedAttendance = await Attendance.findOneAndUpdate(
       { meeting: meetingId },
       {
@@ -48,7 +46,7 @@ exports.markAttendance = async (req, res) => {
           absentMembers: absentMemberIds,
         }
       },
-      { new: true, upsert: true } // new: returns the updated doc, upsert: creates if not found
+      { new: true, upsert: true }
     );
 
     res.status(200).json({ msg: "Attendance has been successfully updated.", attendance: updatedAttendance });
@@ -59,31 +57,38 @@ exports.markAttendance = async (req, res) => {
   }
 };
 
-// ✅ REWRITTEN to fetch data from the new "Array Model"
+
 exports.getAttendanceForMeeting = async (req, res) => {
   try {
     const { meetingId } = req.params;
 
-    // 1. Find the single attendance document for the meeting
+    // Find the single attendance document for the meeting
     const attendanceDoc = await Attendance.findOne({ meeting: meetingId });
 
-    // 2. Get all users for the meeting's team
+    // Find the meeting
     const meeting = await Meeting.findById(meetingId);
-    if (!meeting || !meeting.team) {
-      return res.json([]); // No meeting or team, return empty list
-    }
-    const team = await Team.findById(meeting.team);
-    if (!team || !team.members) {
-      return res.json([]); // No team members, return empty list
+    if (!meeting) return res.json([]); // No meeting, return empty list
+
+    let users = [];
+
+    if (meeting.team) {
+      const team = await Team.findById(meeting.team);
+      if (team && team.members && team.members.length > 0) {
+        // Team exists with members
+        users = await User.find({ '_id': { $in: team.members } }).sort({ name: 1 });
+      } else {
+        // Team empty or missing, fallback to all users
+        users = await User.find({}).sort({ name: 1 });
+      }
+    } else {
+      // No team assigned -> fallback to all users
+      users = await User.find({}).sort({ name: 1 });
     }
 
-    const users = await User.find({ '_id': { $in: team.members } }).sort({ name: 1 });
-
-    // 3. Create the attendance list in the format your frontend expects
+    // Map to frontend format
     const result = users.map(user => {
       let status = "absent"; // Default to absent
       if (attendanceDoc) {
-        // Check if the user ID is in the presentMembers array
         if (attendanceDoc.presentMembers.some(id => id.equals(user._id))) {
           status = "present";
         }
@@ -94,17 +99,21 @@ exports.getAttendanceForMeeting = async (req, res) => {
           name: user.name,
           rollNo: user.rollNo,
           email: user.email,
+          year: user.year,
+          division: user.division,
         },
         status: status,
       };
     });
 
     res.json(result);
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch attendance list" });
   }
 };
+
 
 
 // ✅ Get attendance for a member (all their meetings)
