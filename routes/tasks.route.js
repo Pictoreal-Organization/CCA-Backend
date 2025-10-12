@@ -9,7 +9,8 @@ router.get('/user/:userId', authMiddleware, tasksController.getTasksByUser);
 router.get('/status/:status', authMiddleware, tasksController.getTasksByStatus);
 router.get('/:id', authMiddleware, tasksController.getTaskById);
 router.post('/create', authMiddleware, adminOrHeadOnly, tasksController.createTask);
-router.put('/update', authMiddleware, tasksController.updateTask);
+router.put('/update/:id', authMiddleware, tasksController.updateTask);
 router.delete('/delete', authMiddleware, tasksController.deleteTask);
+router.put('/:taskId/subtasks/:subtaskId/status', authMiddleware, tasksController.updateSubtask);
 
 module.exports = router;
