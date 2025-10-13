@@ -92,3 +92,26 @@ exports.sendMainTaskCompletionEmail = (task, head, members) => {
   const recipientEmails = [head.email, ...members.map(m => m.email)];
   sendEmail(recipientEmails.join(','), subject, html);
 };
+
+exports.sendMeetingCreationEmail = (meeting, organizer, recipients) => {
+  const subject = `📅 New Meeting Scheduled: ${meeting.title}`;
+  const locationOrLink = meeting.location
+    ? `<p><strong>Location:</strong> ${meeting.location}</p>`
+    : `<p><strong>Online Link:</strong> <a href="${meeting.onlineLink}">${meeting.onlineLink}</a></p>`;
+
+  const html = `
+    <h1>New Meeting Scheduled</h1>
+    <p>You have been invited to a new meeting organized by ${organizer.username}.</p>
+    <hr>
+    <h2>${meeting.title}</h2>
+    <p><strong>Description:</strong> ${meeting.description}</p>
+    <p><strong>Date & Time:</strong> ${new Date(meeting.dateTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
+    ${locationOrLink}
+    <p>Please check the app for more details and to confirm your attendance.</p>
+  `;
+
+  const recipientEmails = recipients.map(user => user.email);
+  if (recipientEmails.length > 0) {
+    sendEmail(recipientEmails.join(','), subject, html);
+  }
+};

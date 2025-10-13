@@ -37,8 +37,58 @@ exports.createMeeting = async (req, res) => {
       isPrivate: isPrivate || false,
       invitedMembers: invitedMembers || []
     });
-    
-    await meeting.save();
+
+    const recipientEmails = new Set();
+    const recipientUsers = [];
+
+    // 1. Get the organizer's full user object
+    const organizer = await User.findById(req.user._id);
+
+    // 2. Get all users with the 'Head' role
+    const heads = await User.find({ role: 'Head' });
+    heads.forEach(head => {
+      if (!recipientEmails.has(head.email)) {
+        recipientEmails.add(head.email);
+        recipientUsers.push(head);
+      }
+    });
+
+    // 3. Get specifically invited members
+    if (invitedMembers && invitedMembers.length > 0) {
+      const invited = await User.find({ '_id': { $in: invitedMembers } });
+      invited.forEach(user => {
+        if (!recipientEmails.has(user.email)) {
+          recipientEmails.add(user.email);
+          recipientUsers.push(user);
+        }
+      });
+    }
+
+    // 4. If it's a team meeting, get all team members and heads
+    if (team) {
+      const teamData = await Team.findById(team).populate('members').populate('heads');
+      if (teamData) {
+        teamData.members.forEach(user => {
+          if (!recipientEmails.has(user.email)) {
+            recipientEmails.add(user.email);
+            recipientUsers.push(user);
+          }
+        });
+        teamData.heads.forEach(user => {
+          if (!recipientEmails.has(user.email)) {
+            recipientEmails.add(user.email);
+            recipientUsers.push(user);
+          }
+        });
+      }
+    }
+
+    // 5. Send the email to the unique list of recipients
+    if (recipientUsers.length > 0) {
+      emailService.sendMeetingCreationEmail(meeting, organizer, recipientUsers);
+    }
+    // --- END EMAIL LOGIC ---
+
     res.status(201).json({ msg: "Meeting created successfully", meeting });
 
   } catch (err) {
@@ -147,7 +197,7 @@ exports.getMeetingsForAttendance = async (req, res) => {
     // Completed meetings in last 2 days
     const meetings = await Meeting.find({
       status: 'completed',
-      dateTime: { $gte: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000) } 
+      dateTime: { $gte: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000) }
     });
 
     res.status(200).json(meetings);
