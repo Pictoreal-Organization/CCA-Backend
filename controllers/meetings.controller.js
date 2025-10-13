@@ -1,5 +1,5 @@
-// controllers/meetings.controller.js
-const { Meeting } = require('../models/index');
+const { Meeting, User, Team } = require('../models/index');
+const emailService = require('../services/email.service');
 
 exports.createMeeting = async (req, res) => {
   try {
@@ -8,20 +8,18 @@ exports.createMeeting = async (req, res) => {
       priority, location, onlineLink, team, tags, isPrivate, invitedMembers
     } = req.body;
 
+    // --- Validation (This part is already perfect) ---
     if (!title || !description || !dateTime) {
       return res.status(400).json({ msg: "Title, description, and dateTime are required" });
     }
-
-    // Online meeting
     if ((!location || location.trim() === '') && (!onlineLink || onlineLink.trim() === '')) {
       return res.status(400).json({ msg: "Provide either a location or an online link" });
     }
-
-    // Prevent both being filled
     if (location && onlineLink) {
       return res.status(400).json({ msg: "Provide only location or online link, not both" });
     }
 
+    // --- Create and Save Meeting FIRST ---
     const meeting = new Meeting({
       title,
       description,
@@ -37,7 +35,12 @@ exports.createMeeting = async (req, res) => {
       isPrivate: isPrivate || false,
       invitedMembers: invitedMembers || []
     });
+    
+    // ✅ FIX: Save the meeting to the database immediately.
+    // This ensures the meeting exists before any emails are sent.
+    await meeting.save();
 
+    // --- Email Notification Logic (This part is already perfect) ---
     const recipientEmails = new Set();
     const recipientUsers = [];
 
@@ -87,8 +90,7 @@ exports.createMeeting = async (req, res) => {
     if (recipientUsers.length > 0) {
       emailService.sendMeetingCreationEmail(meeting, organizer, recipientUsers);
     }
-    // --- END EMAIL LOGIC ---
-
+    
     res.status(201).json({ msg: "Meeting created successfully", meeting });
 
   } catch (err) {
