@@ -4,15 +4,8 @@ const { Meeting } = require('../models/index');
 exports.createMeeting = async (req, res) => {
   try {
     const {
-      title,
-      description,
-      agenda,
-      dateTime,
-      duration,
-      priority,
-      location,
-      onlineLink,
-      team
+      title, description, agenda, dateTime, duration,
+      priority, location, onlineLink, team, tags, isPrivate, invitedMembers
     } = req.body;
 
     if (!title || !description || !dateTime) {
@@ -38,13 +31,16 @@ exports.createMeeting = async (req, res) => {
       priority,
       location: location || null,
       onlineLink: onlineLink || null,
-      organizer: req.user._id, // automatically the head or admin creating it
-      team
+      organizer: req.user._id,
+      team: team || null,
+      tags: tags || [],
+      isPrivate: isPrivate || false,
+      invitedMembers: invitedMembers || []
     });
-
+    
     await meeting.save();
-
     res.status(201).json({ msg: "Meeting created successfully", meeting });
+
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -71,7 +67,7 @@ exports.getUpcomingMeetings = async (req, res) => {
 };
 
 // Get meetings by status
-exports.getMeetingsByStatus = async (req, res) => {
+exports.getAllMeetingsByStatus = async (req, res) => {
   try {
     const { status } = req.params; // pass status in URL
     if (!['scheduled', 'ongoing', 'completed', 'cancelled'].includes(status)) {
@@ -84,6 +80,52 @@ exports.getMeetingsByStatus = async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch meetings by status' });
   }
 };
+
+exports.getMeetingsByStatus = async (req, res) => {
+  try {
+    const { status } = req.params;
+    const userId = req.user._id.toString();
+    const userRole = req.user.role; // 'Admin', 'Head', 'Member'
+
+    if (!['scheduled', 'ongoing', 'completed', 'cancelled'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status value' });
+    }
+
+    const meetings = await Meeting.find({ status })
+      .populate('team')
+      .populate('invitedMembers')
+      .populate('organizer');
+
+    const visibleMeetings = meetings.filter(meeting => {
+      // ✅ 1. Public meetings visible to everyone
+      if (meeting.isPrivate === false) return true;
+
+      // ✅ 2. Admins/Heads can view all private meetings
+      if (userRole === 'Admin' || userRole === 'Head') return true;
+
+      // ✅ 3. Invited members can see private meetings
+      if (meeting.invitedMembers?.some(u => u._id.toString() === userId)) {
+        return true;
+      }
+
+      // ✅ 4. Team members (heads/members) can see private team meetings
+      if (meeting.team) {
+        const isTeamHead = meeting.team.heads?.some(headId => headId.toString() === userId);
+        const isTeamMember = meeting.team.members?.some(memberId => memberId.toString() === userId);
+        if (isTeamHead || isTeamMember) return true;
+      }
+
+      // ❌ 5. Otherwise, not visible
+      return false;
+    });
+
+    res.status(200).json(visibleMeetings);
+  } catch (err) {
+    console.error("Error fetching meetings:", err);
+    res.status(500).json({ error: 'Failed to fetch meetings by status' });
+  }
+};
+
 
 exports.getMeetingById = async (req, res) => {
   try {

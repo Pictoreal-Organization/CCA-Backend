@@ -14,16 +14,22 @@ const meetingSchema = new Schema({
   },
   location: { type: String, required: function() { return !this.onlineLink; }, default: null },
   onlineLink: { type: String, default: null, required: function() { return !this.location; } },
-
-
   organizer: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  team: { type: Schema.Types.ObjectId, ref: 'Team', default: null }, // optional
-  
+  team: [{ type: Schema.Types.ObjectId, ref: 'Team', default: null }], // optional
   status: {
     type: String,
     enum: ['scheduled', 'ongoing', 'completed', 'cancelled'],
     default: 'scheduled'
   },
+  tags: {
+    type: [String], // multiple tags possible
+    enum: ['General', 'Impactathon', 'PictoFest', 'BDD'], // define your enums here
+    default: []
+  },
+  isPrivate: { type: Boolean, default: false }, // private or public meeting
+  invitedMembers: [
+    { type: Schema.Types.ObjectId, ref: 'User' } // array of user IDs
+  ],
   createdAt: { type: Date, default: Date.now }
 });
 
