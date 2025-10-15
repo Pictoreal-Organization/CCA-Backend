@@ -39,6 +39,24 @@ app.get('/', (req, res) => {
   res.send('It works!');
 });
 
+const axios = require("axios");
+
+app.get('/dummy', (req, res) => {
+    res.status(200).json({ message: 'OK' });
+});
+
+const BACKEND_URL = "https://cca-backend.onrender.com/dummy";
+
+function keepAlive() {
+  console.log("Pinging services...");
+  axios.get(BACKEND_URL)
+    .then(res => console.log("Backend pinged:", res.data))
+    .catch(err => console.log("Backend ping failed:", err.message));
+}
+
+setInterval(keepAlive, 10 * 60 * 1000)
+keepAlive();
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on http://0.0.0.0:${PORT}`);
 });
