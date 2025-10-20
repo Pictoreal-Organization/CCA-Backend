@@ -10,7 +10,7 @@ router.get('/status/:status', authMiddleware, tasksController.getTasksByStatus);
 router.get('/:id', authMiddleware, tasksController.getTaskById);
 router.post('/create', authMiddleware, adminOrHeadOnly, tasksController.createTask);
 router.put('/update/:id', authMiddleware, tasksController.updateTask);
-router.delete('/delete', authMiddleware, tasksController.deleteTask);
+router.delete('/delete/:id', authMiddleware, tasksController.deleteTask);
 router.put('/:taskId/subtasks/:subtaskId/status', authMiddleware, tasksController.updateSubtask);
 router.get('/user/:userId/completed', authMiddleware, tasksController.getCompletedTasksByUser);
 
