@@ -105,3 +105,21 @@ exports.getAllUsers = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+exports.getLoggedInUser = async (req, res) => {
+  try {
+    const user = req.user;
+
+    if (!user) return res.status(401).json({ msg: 'Unauthorized: No user found' });
+
+    // Re-fetch from DB to get latest data (optional)
+    const freshUser = await User.findById(user._id)
+      .select('-password -refreshToken -otp -otpExpiry'); // exclude sensitive info
+
+    if (!freshUser) return res.status(404).json({ msg: 'User not found' });
+
+    res.json({ msg: 'User fetched successfully', user: freshUser });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};

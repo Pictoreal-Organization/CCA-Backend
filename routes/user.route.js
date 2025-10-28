@@ -7,5 +7,6 @@ router.post('/request-password-change', authMiddleware, userController.requestPa
 router.post('/change-password-otp', authMiddleware, userController.changePasswordWithOTP);
 router.put('/update-profile', authMiddleware, userController.updateUserProfile);
 router.get('/all', authMiddleware, userController.getAllUsers);
+router.get('/me', authMiddleware, userController.getLoggedInUser);
 
 module.exports = router;
