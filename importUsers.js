@@ -11,7 +11,7 @@ const { User, Team } = require('./models/index');
 (async () => {
   const results = [];
 
-  fs.createReadStream('responses1.csv')
+  fs.createReadStream('fys_responses.csv')
     .pipe(csv())
     .on('data', (data) => results.push(data))
     .on('end', async () => {
