@@ -207,3 +207,70 @@ exports.getMeetingsForAttendance = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+// Delete a meeting
+exports.deleteMeeting = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Find meeting by ID
+    const meeting = await Meeting.findById(id);
+    if (!meeting) {
+      return res.status(404).json({ msg: "Meeting not found" });
+    }
+
+    // Optional: Allow only Admin, Head, or the organizer to delete
+    if (
+      req.user.role !== 'Admin' &&
+      req.user.role !== 'Head' &&
+      meeting.organizer.toString() !== req.user._id.toString()
+    ) {
+      return res.status(403).json({ msg: "You are not authorized to delete this meeting" });
+    }
+
+    // Delete the meeting
+    await Meeting.findByIdAndDelete(id);
+
+    // (Optional) Send cancellation email
+    try {
+      const organizer = await User.findById(meeting.organizer);
+      const recipientEmails = new Set();
+      const recipientUsers = [];
+
+      // Add invited members
+      if (meeting.invitedMembers?.length > 0) {
+        const invited = await User.find({ _id: { $in: meeting.invitedMembers } });
+        invited.forEach(u => {
+          if (!recipientEmails.has(u.email)) {
+            recipientEmails.add(u.email);
+            recipientUsers.push(u);
+          }
+        });
+      }
+
+      // Add team members if applicable
+      if (meeting.team) {
+        const teamData = await Team.findById(meeting.team).populate('members').populate('heads');
+        if (teamData) {
+          [...teamData.members, ...teamData.heads].forEach(u => {
+            if (!recipientEmails.has(u.email)) {
+              recipientEmails.add(u.email);
+              recipientUsers.push(u);
+            }
+          });
+        }
+      }
+
+      // Send cancellation email (if your email service supports it)
+      if (recipientUsers.length > 0) {
+        emailService.sendMeetingCancellationEmail(meeting, organizer, recipientUsers);
+      }
+    } catch (emailErr) {
+      console.warn("Failed to send cancellation email:", emailErr.message);
+    }
+
+    res.status(200).json({ msg: "Meeting deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};

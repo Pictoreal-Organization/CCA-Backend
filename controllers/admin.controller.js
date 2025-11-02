@@ -142,12 +142,13 @@ exports.adminCreateHead = async (req, res) => {
 exports.deleteUser = async (req, res) => {
   try {
     const { userId } = req.params;
-    const user = await User.findByIdAndDelete(userId);
 
-    if (!user) return res.status(404).json({ msg: "User not found" });
+    const deletedUser = await User.findOneAndDelete({ _id: userId });
+    if (!deletedUser) return res.status(404).json({ msg: "User not found" });
 
-    res.json({ msg: "User deleted successfully" });
+    res.json({ msg: `${deletedUser.role} deleted successfully and removed from teams.` });
   } catch (err) {
+    console.error("Error deleting user:", err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -236,13 +237,15 @@ exports.getAllUsersForAdmin = async (req, res) => {
   try {
     const users = await User.find({}, 'username name email role year division initialPassword passwordChanged');
     const formatted = users.map(u => ({
+      _id: u._id,
       username: u.username,
       name: u.name,
       email: u.email,
       role: u.role,
       password: u.passwordChanged ? "Hidden" : u.initialPassword,
       year: u.year,
-      division: u.division
+      division: u.division,
+      rollNo: u.rollNo
     }));
     res.json(formatted);
   } catch (err) {
