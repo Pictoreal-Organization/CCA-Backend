@@ -16,6 +16,7 @@ const userSchema = new Schema({
   year: String,
   division: String,
   phone: String,
+  avatar: { type: String, default: "" },
 
   // Relationships
   team: [{ type: Schema.Types.ObjectId, ref: 'Team' }],

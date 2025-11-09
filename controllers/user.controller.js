@@ -123,3 +123,21 @@ exports.getLoggedInUser = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+exports.updateAvatar = async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user) return res.status(404).json({ msg: "User not found" });
+
+    const { avatar } = req.body;
+    if (!avatar) return res.status(400).json({ msg: "Avatar path required" });
+
+    user.avatar = avatar;
+    await user.save();
+
+    res.json({ msg: "Avatar updated successfully", avatar: user.avatar });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
