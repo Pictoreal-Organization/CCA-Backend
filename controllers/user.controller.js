@@ -80,22 +80,27 @@ exports.updateUserProfile = async (req, res) => {
     const user = req.user;
     if (!user) return res.status(404).json({ msg: "User not found" });
 
-    const { name, rollNo, year, division, phone } = req.body;
+    const { name, rollNo, year, division, phone, avatar } = req.body;
 
-    // Update allowed fields
+    // Update allowed fields only if provided
     if (name) user.name = name;
     if (rollNo) user.rollNo = rollNo;
     if (year) user.year = year;
     if (division) user.division = division;
     if (phone) user.phone = phone;
+    if (avatar) user.avatar = avatar; // ✅ avatar included here
 
     await user.save();
 
-    res.json({ msg: "Profile updated successfully", user });
+    res.json({
+      msg: "Profile (including avatar) updated successfully",
+      user,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
+
 
 exports.getAllUsers = async (req, res) => {
   try {
@@ -124,20 +129,4 @@ exports.getLoggedInUser = async (req, res) => {
   }
 };
 
-exports.updateAvatar = async (req, res) => {
-  try {
-    const user = req.user;
-    if (!user) return res.status(404).json({ msg: "User not found" });
-
-    const { avatar } = req.body;
-    if (!avatar) return res.status(400).json({ msg: "Avatar path required" });
-
-    user.avatar = avatar;
-    await user.save();
-
-    res.json({ msg: "Avatar updated successfully", avatar: user.avatar });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
 
