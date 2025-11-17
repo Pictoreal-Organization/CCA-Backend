@@ -4,7 +4,9 @@ require('dotenv').config(); // Load environment variables from .env file
 // 1. Create the Transporter
 // This is the object that connects to your email provider (like Gmail)
 const transporter = nodemailer.createTransport({
-  service: 'gmail', // Use 'gmail' for simplicity
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false, // Use 'gmail' for simplicity
   auth: {
     user: process.env.EMAIL_USER, // Your email from .env file
     pass: process.env.EMAIL_PASS, // Your App Password from .env file
