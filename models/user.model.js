@@ -16,6 +16,7 @@ const userSchema = new Schema({
   year: String,
   division: String,
   phone: String,
+  avatar: { type: String, default: "" },
 
   // Relationships
   team: [{ type: Schema.Types.ObjectId, ref: 'Team' }],
@@ -57,5 +58,37 @@ userSchema.methods.generateRefreshToken = function () {
     { expiresIn: '7d' }
   );
 };
+
+userSchema.pre('findOneAndDelete', async function (next) {
+  try {
+    const user = await this.model.findOne(this.getFilter());
+    if (!user) return next();
+
+    // Import Team model here to avoid circular import issues
+    const Team = require('./team.model');
+
+    if (Array.isArray(user.team) && user.team.length > 0) {
+      for (const teamId of user.team) {
+        if (user.role === 'Member') {
+          await Team.findByIdAndUpdate(
+            teamId,
+            { $pull: { members: user._id } }
+          );
+        } else if (user.role === 'Head') {
+          await Team.findByIdAndUpdate(
+            teamId,
+            { $pull: { heads: user._id } }
+          );
+        }
+      }
+    }
+
+    next();
+  } catch (err) {
+    console.error('Error in user cleanup hook:', err);
+    next(err);
+  }
+});
+
 
 module.exports = mongoose.model('User', userSchema);

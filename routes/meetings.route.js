@@ -9,5 +9,6 @@ router.get('/status/:status', authMiddleware, meetingsController.getMeetingsBySt
 router.get('/all/status/:status', authMiddleware, adminOnly, meetingsController.getAllMeetingsByStatus);
 router.get('/:id', authMiddleware, meetingsController.getMeetingById);
 router.get('/attendance/pending', authMiddleware, adminOrHeadOnly, meetingsController.getMeetingsForAttendance);
+router.delete('/delete/:id', authMiddleware, meetingsController.deleteMeeting);
 
 module.exports = router;

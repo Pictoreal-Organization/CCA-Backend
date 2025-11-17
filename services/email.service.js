@@ -117,3 +117,23 @@ exports.sendMeetingCreationEmail = (meeting, organizer, recipients) => {
     sendEmail(recipientEmails.join(','), subject, html);
   }
 };
+
+exports.sendMeetingCancellationEmail = (meeting, organizer, recipients) => {
+  const subject = `❌ Meeting Cancelled: ${meeting.title}`;
+  const html = `
+    <h1>Meeting Cancelled</h1>
+    <p>The meeting <strong>"${meeting.title}"</strong> scheduled on 
+    <strong>${new Date(meeting.dateTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</strong> 
+    has been cancelled by ${organizer.username}.</p>
+    <hr>
+    <p><strong>Reason (if any):</strong> This meeting will no longer take place as planned.</p>
+    <p>We apologize for any inconvenience caused.</p>
+    <br>
+    <p>- PICTOREAL Team</p>
+  `;
+
+  const recipientEmails = recipients.map(user => user.email);
+  if (recipientEmails.length > 0) {
+    sendEmail(recipientEmails.join(','), subject, html);
+  }
+};
