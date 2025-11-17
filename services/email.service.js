@@ -4,9 +4,7 @@ require('dotenv').config(); // Load environment variables from .env file
 // 1. Create the Transporter
 // This is the object that connects to your email provider (like Gmail)
 const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false, // Use 'gmail' for simplicity
+  service: 'gmail', // Use 'gmail' for simplicity
   auth: {
     user: process.env.EMAIL_USER, // Your email from .env file
     pass: process.env.EMAIL_PASS, // Your App Password from .env file
@@ -110,26 +108,6 @@ exports.sendMeetingCreationEmail = (meeting, organizer, recipients) => {
     <p><strong>Date & Time:</strong> ${new Date(meeting.dateTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
     ${locationOrLink}
     <p>Please check the app for more details and to confirm your attendance.</p>
-  `;
-
-  const recipientEmails = recipients.map(user => user.email);
-  if (recipientEmails.length > 0) {
-    sendEmail(recipientEmails.join(','), subject, html);
-  }
-};
-
-exports.sendMeetingCancellationEmail = (meeting, organizer, recipients) => {
-  const subject = `❌ Meeting Cancelled: ${meeting.title}`;
-  const html = `
-    <h1>Meeting Cancelled</h1>
-    <p>The meeting <strong>"${meeting.title}"</strong> scheduled on 
-    <strong>${new Date(meeting.dateTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</strong> 
-    has been cancelled by ${organizer.username}.</p>
-    <hr>
-    <p><strong>Reason (if any):</strong> This meeting will no longer take place as planned.</p>
-    <p>We apologize for any inconvenience caused.</p>
-    <br>
-    <p>- PICTOREAL Team</p>
   `;
 
   const recipientEmails = recipients.map(user => user.email);
