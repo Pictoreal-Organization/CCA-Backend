@@ -10,7 +10,8 @@ const subtaskSchema = new Schema({
     type: String,
     enum: ['Pending', 'In Progress', 'Completed'],
     default: 'Pending'
-  }
+  },
+  completedAt: { type: Date, default: null }
 }, { timestamps: true });
 
 // Task Schema
@@ -24,7 +25,8 @@ const taskSchema = new Schema({
   },
   startDate: Date,
   deadline: Date,
-  team: { type: Schema.Types.ObjectId, ref: 'Team', default: null }, // optional
+  completedAt: { type: Date, default: null },
+  team: { type: Schema.Types.ObjectId, ref: 'Team', default: null },
   subtasks: [subtaskSchema]
 }, { timestamps: true });
 
