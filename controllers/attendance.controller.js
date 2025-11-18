@@ -71,7 +71,18 @@ exports.getAttendanceForMeeting = async (req, res) => {
 
     let users = [];
 
-    if (meeting.team) {
+     if (meeting.isPrivate) {
+      if (meeting.invitedMembers && meeting.invitedMembers.length > 0) {
+        users = await User.find({
+          _id: { $in: meeting.invitedMembers }
+        }).sort({ name: 1 });
+      } else {
+        // No invited members - return empty list
+        return res.json([]);
+      }
+    }
+
+    else if (meeting.team) {
       const team = await Team.findById(meeting.team);
       if (team && team.members && team.members.length > 0) {
         // Team exists with members
