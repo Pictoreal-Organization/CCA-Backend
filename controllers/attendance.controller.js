@@ -5,13 +5,22 @@ const canMarkAttendance = async (user, meeting) => {
 
   if (user.role === 'Admin') return true;
 
-  if (user.role === 'Head') {
-    if (!meeting.team) return true;
-    const team = await Team.findById(meeting.team);
-    if (!team) return false;
+  // if (user.role === 'Head') {
+  //   if (!meeting.team) return true;
+  //   const team = await Team.findById(meeting.team);
+  //   if (!team) return false;
 
-    return team.heads.some(headId => headId.equals(user._id));
-  }
+  //   return team.heads.some(headId => headId.equals(user._id));
+  // }
+  if (user.role === 'Head') {
+    if (!meeting.team || meeting.team.length === 0) return true;
+  
+    const teams = await Team.find({ _id: { $in: meeting.team } });
+    if (!teams || teams.length === 0) return false;
+  
+    // Head should belong to at least one team in the meeting
+    return teams.some(team => team.heads.some(headId => headId.equals(user._id)));
+  }  
 
   return true;
 };
