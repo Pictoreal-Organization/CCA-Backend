@@ -184,9 +184,9 @@ exports.createTask = async (req, res) => {
     const uniqueUserIds = [...new Set(assignedUserIds)]; // Remove duplicates
     const assignedUsers = await User.find({ '_id': { $in: uniqueUserIds } });
 
-    if (assignedUsers.length > 0) {
-      emailService.sendTaskCreationEmail(task, assignedUsers);
-    }
+    // if (assignedUsers.length > 0) {
+    //   emailService.sendTaskCreationEmail(task, assignedUsers);
+    // }
 
     const populatedTask = await Task.findById(task._id)
       .populate('team')
@@ -331,9 +331,9 @@ exports.updateTask = async (req, res) => {
       const involvedMembers = await User.find({ '_id': { $in: uniqueUserIds } });
       const headUser = await User.findById(req.user.id);
 
-      if (involvedMembers.length > 0 && headUser) {
-        emailService.sendMainTaskCompletionEmail(updatedTask, headUser, involvedMembers);
-      }
+      // if (involvedMembers.length > 0 && headUser) {
+      //   emailService.sendMainTaskCompletionEmail(updatedTask, headUser, involvedMembers);
+      // }
     }
 
     const populatedTask = await updatedTask.populate(['team', 'subtasks.assignedTo']);
@@ -404,21 +404,21 @@ exports.updateSubtask = async (req, res) => {
       }
 
       // 4. Loop through each head and send the email
-      for (const head of heads) {
-        try {
-          // Assuming your service sends the email asynchronously
-          emailService.sendSubtaskCompletionEmail(updatedSubtask, member, head.email);
-        } catch (emailError) {
-          console.error(`Failed to send email to head ${head.email}:`, emailError);
-        }
-      }
+      // for (const head of heads) {
+      //   try {
+      //     // Assuming your service sends the email asynchronously
+      //     emailService.sendSubtaskCompletionEmail(updatedSubtask, member, head.email);
+      //   } catch (emailError) {
+      //     console.error(`Failed to send email to head ${head.email}:`, emailError);
+      //   }
+      // }
     }
 
     if (role === 'Head' && status === 'Pending' && originalStatus === 'Completed') {
       const assignedMember = await User.findById(updatedSubtask.assignedTo[0]);
-      if (assignedMember) {
-        emailService.sendChangesSuggestedEmail(updatedSubtask, assignedMember);
-      }
+      // if (assignedMember) {
+      //   emailService.sendChangesSuggestedEmail(updatedSubtask, assignedMember);
+      // }
     }
 
     res.status(200).json({ message: 'Subtask updated successfully', task: updatedTask });
