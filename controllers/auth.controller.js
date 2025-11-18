@@ -1,6 +1,5 @@
-const crypto = require('crypto');
-const nodemailer = require('nodemailer');
 const { User } = require('../models/index');
+const emailService = require('../services/email.service');
 
 exports.register = async (req, res) => {
   try {
@@ -82,32 +81,16 @@ exports.requestPasswordChange = async (req, res) => {
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ msg: "User not found" });
 
-    // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     user.otp = otp;
     user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
-
     await user.save();
 
-    // Send OTP via email
-    const transporter = nodemailer.createTransport({
-      service: 'Gmail',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      }
-    });
-
     try {
-      await transporter.sendMail({
-        from: process.env.EMAIL_USER,
-        to: user.email,
-        subject: "OTP for Password Change",
-        text: `Your OTP for password change is: ${otp}`
-      });
+      await emailService.sendOtpEmail(user.email, otp);
     } catch (err) {
       return res.status(500).json({ msg: "Failed to send OTP email" });
-    }    
+    }
 
     res.json({ msg: "OTP sent to email" });
   } catch (err) {

@@ -1,117 +1,95 @@
 const nodemailer = require('nodemailer');
-require('dotenv').config(); // Load environment variables from .env file
+require('dotenv').config();
 
-// 1. Create the Transporter
-// This is the object that connects to your email provider (like Gmail)
 const transporter = nodemailer.createTransport({
-  service: 'gmail', // Use 'gmail' for simplicity
+  service: 'gmail',
   auth: {
-    user: process.env.EMAIL_USER, // Your email from .env file
-    pass: process.env.EMAIL_PASS, // Your App Password from .env file
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
   },
 });
 
-// 2. A generic function to send any email
+// Generic reusable mail sender
 const sendEmail = async (to, subject, html) => {
   try {
-    const mailOptions = {
-      from: `"PICTOREAL" <${process.env.EMAIL_USER}>`, // Sender display name
-      to: to, // Recipient's email address
-      subject: subject, // Subject line
-      html: html, // Email body in HTML format
-    };
-
-    await transporter.sendMail(mailOptions);
-    console.log('Email sent successfully');
-  } catch (error) {
-    console.error('Error sending email:', error);
-    // In a real app, you might want more robust error handling here
+    await transporter.sendMail({
+      from: `"PICTOREAL" <${process.env.EMAIL_USER}>`,
+      to,
+      subject,
+      html,
+    });
+    console.log("Email sent");
+  } catch (err) {
+    console.error("Email sending error:", err);
+    throw new Error("Email send failed");
   }
 };
 
-// 3. Specific email templates for different events
+// 🔹 OTP Email
+exports.sendOtpEmail = async (email, otp) => {
+  const html = `
+    <h2>Your OTP for Password Change</h2>
+    <p>Your OTP is:</p>
+    <h1 style="letter-spacing: 5px">${otp}</h1>
+    <p>This OTP is valid for 10 minutes.</p>
+  `;
+  await sendEmail(email, "OTP for Password Change", html);
+};
 
-// Sent when a new task is created
 exports.sendTaskCreationEmail = (task, assignedUsers) => {
   const subject = `🚀 New Task Assigned: ${task.title}`;
   const assignedNames = assignedUsers.map(u => u.username).join(', ');
+
   const html = `
     <h1>New Task: ${task.title}</h1>
     <p>A new task has been created and subtasks have been assigned.</p>
     <p><strong>Description:</strong> ${task.description}</p>
     <p><strong>Deadline:</strong> ${new Date(task.deadline).toLocaleDateString()}</p>
     <p><strong>Assigned To:</strong> ${assignedNames}</p>
-    <p>Please log in to the app to view your subtasks.</p>
   `;
 
-  // Send the email to all assigned members
   const recipientEmails = assignedUsers.map(u => u.email);
-  if (recipientEmails.length > 0) {
-    sendEmail(recipientEmails.join(','), subject, html);
-  }
+  return sendEmail(recipientEmails.join(','), subject, html);
 };
 
-// Sent to the Head when a member completes a subtask
 exports.sendSubtaskCompletionEmail = (subtask, member, headEmail) => {
   const subject = `✅ Subtask Completed: ${subtask.title}`;
   const html = `
     <h1>Subtask Completed by ${member.username}</h1>
-    <p>The subtask "<strong>${subtask.title}</strong>" has been marked as completed and is ready for your review.</p>
-    <p><strong>Member's Completion Note:</strong></p>
-    <p><em>${subtask.description}</em></p>
-    <p>Please log in to the dashboard to approve it or suggest changes.</p>
+    <p>The subtask "<strong>${subtask.title}</strong>" has been marked as completed.</p>
   `;
-  sendEmail(headEmail, subject, html);
+
+  return sendEmail(headEmail, subject, html);
 };
 
-// Sent to a member when a Head suggests changes
 exports.sendChangesSuggestedEmail = (subtask, member) => {
-  const subject = `📝 Changes Suggested for: ${subtask.title}`;
+  const subject = `📝 Changes Suggested: ${subtask.title}`;
   const html = `
-    <h1>Changes Suggested for Subtask: ${subtask.title}</h1>
-    <p>A head has reviewed your completed subtask and suggested some changes.</p>
-    <p><strong>Feedback:</strong></p>
-    <p><em>${subtask.description}</em></p>
-    <p>The subtask status has been reverted to "Pending". Please review the feedback and resubmit.</p>
+    <h1>Changes Suggested</h1>
+    <p>Your subtask "${subtask.title}" needs some updates.</p>
   `;
-  sendEmail(member.email, subject, html);
+
+  return sendEmail(member.email, subject, html);
 };
 
 exports.sendMainTaskCompletionEmail = (task, head, members) => {
   const subject = `🎉 Task Completed: ${task.title}`;
   const html = `
-    <h1>Task Completed: ${task.title}</h1>
-    <p>The main task "<strong>${task.title}</strong>" has been officially marked as completed by ${head.username}.</p>
-    <p>This task has now been moved to your profile history.</p>
-    <p>Thank you for your hard work and contribution!</p>
-    <br>
-    <p>- PICTOREAL</p>
+    <h1>${task.title} - Completed</h1>
+    <p>Great job team!</p>
   `;
 
-  // Create a recipient list including the head and all involved members.
-  const recipientEmails = [head.email, ...members.map(m => m.email)];
-  sendEmail(recipientEmails.join(','), subject, html);
+  const emails = [head.email, ...members.map(m => m.email)];
+  return sendEmail(emails.join(','), subject, html);
 };
 
 exports.sendMeetingCreationEmail = (meeting, organizer, recipients) => {
-  const subject = `📅 New Meeting Scheduled: ${meeting.title}`;
-  const locationOrLink = meeting.location
-    ? `<p><strong>Location:</strong> ${meeting.location}</p>`
-    : `<p><strong>Online Link:</strong> <a href="${meeting.onlineLink}">${meeting.onlineLink}</a></p>`;
-
+  const subject = `📅 New Meeting: ${meeting.title}`;
   const html = `
-    <h1>New Meeting Scheduled</h1>
-    <p>You have been invited to a new meeting organized by ${organizer.username}.</p>
-    <hr>
-    <h2>${meeting.title}</h2>
-    <p><strong>Description:</strong> ${meeting.description}</p>
-    <p><strong>Date & Time:</strong> ${new Date(meeting.dateTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
-    ${locationOrLink}
-    <p>Please check the app for more details and to confirm your attendance.</p>
+    <h1>${meeting.title}</h1>
+    <p>Organized by ${organizer.username}</p>
   `;
 
-  const recipientEmails = recipients.map(user => user.email);
-  if (recipientEmails.length > 0) {
-    sendEmail(recipientEmails.join(','), subject, html);
-  }
+  const emails = recipients.map(r => r.email);
+  return sendEmail(emails.join(','), subject, html);
 };
