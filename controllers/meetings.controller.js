@@ -1,5 +1,5 @@
 const { Meeting, User, Team } = require('../models/index');
-const emailService = require('../services/email.service');
+// const emailService = require('../services/email.service');
 
 exports.createMeeting = async (req, res) => {
   try {
@@ -87,9 +87,9 @@ exports.createMeeting = async (req, res) => {
     }
 
     // 5. Send the email to the unique list of recipients
-    if (recipientUsers.length > 0) {
-      emailService.sendMeetingCreationEmail(meeting, organizer, recipientUsers);
-    }
+    // if (recipientUsers.length > 0) {
+    //   emailService.sendMeetingCreationEmail(meeting, organizer, recipientUsers);
+    // }
     
     res.status(201).json({ msg: "Meeting created successfully", meeting });
 
@@ -262,9 +262,9 @@ exports.deleteMeeting = async (req, res) => {
       }
 
       // Send cancellation email (if your email service supports it)
-      if (recipientUsers.length > 0) {
-        emailService.sendMeetingCancellationEmail(meeting, organizer, recipientUsers);
-      }
+      // if (recipientUsers.length > 0) {
+      //   emailService.sendMeetingCancellationEmail(meeting, organizer, recipientUsers);
+      // }
     } catch (emailErr) {
       console.warn("Failed to send cancellation email:", emailErr.message);
     }
