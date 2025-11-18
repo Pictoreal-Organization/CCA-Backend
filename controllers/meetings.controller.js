@@ -100,12 +100,55 @@ exports.createMeeting = async (req, res) => {
 
 exports.getAllMeetings = async (req, res) => {
   try {
-    const meetings = await Meeting.find().sort({ dateTime: 1 });
-    res.status(200).json(meetings);
+    const userId = req.user._id.toString();
+    const userRole = req.user.role; // Admin / Head / Member
+
+    // Fetch all meetings first
+    const meetings = await Meeting.find()
+      .populate("team")
+      .populate("invitedMembers")
+      .populate("organizer")
+      .sort({ dateTime: 1 });
+
+    const visibleMeetings = meetings.filter(meeting => {
+
+      // 1. PUBLIC MEETINGS visible to all
+      if (meeting.isPrivate === false) return true;
+
+      // 2. ADMIN can see ALL private meetings
+      if (userRole === "Admin") return true;
+
+      // 3. HEAD can see ONLY private meetings they created
+      if (userRole === "Head") {
+        return meeting.organizer._id.toString() === userId;
+      }
+
+      // 4. MEMBER can see private meetings they are invited to
+      if (userRole === "Member") {
+        const isInvited = meeting.invitedMembers.some(
+          u => u._id.toString() === userId
+        );
+        if (isInvited) return true;
+
+        // also team  meetings
+        if (meeting.team) {
+          const isMember = meeting.team.members?.some(
+            m => m.toString() === userId
+          );
+          if (isMember) return true;
+        }
+      }
+
+      return false; // not visible
+    });
+
+    res.status(200).json(visibleMeetings);
+
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch meetings' });
+    res.status(500).json({ error: "Failed to fetch meetings" });
   }
 };
+
 
 exports.getUpcomingMeetings = async (req, res) => {
   try {
@@ -137,46 +180,80 @@ exports.getMeetingsByStatus = async (req, res) => {
   try {
     const { status } = req.params;
     const userId = req.user._id.toString();
-    const userRole = req.user.role; // 'Admin', 'Head', 'Member'
+    const userRole = req.user.role;
 
     if (!['scheduled', 'ongoing', 'completed', 'cancelled'].includes(status)) {
       return res.status(400).json({ error: 'Invalid status value' });
     }
 
     const meetings = await Meeting.find({ status })
-      .populate('team')
-      .populate('invitedMembers')
-      .populate('organizer');
+      .populate({
+        path: 'team',
+        populate: [
+          { path: 'members', select: '_id name email' },
+          { path: 'heads', select: '_id name email' }
+        ]
+      })
+      .populate('invitedMembers', '_id name email')
+      .populate('organizer', '_id name email');
 
-    const visibleMeetings = meetings.filter(meeting => {
-      // ✅ 1. Public meetings visible to everyone
-      if (meeting.isPrivate === false) return true;
+      const visibleMeetings = meetings.filter(meeting => {
+        const userIdStr = req.user._id.toString();
+        const userRole = req.user.role; // 'Admin', 'Head', 'Member'
 
-      // ✅ 2. Admins/Heads can view all private meetings
-      if (userRole === 'Admin' || userRole === 'Head') return true;
+        const hasTeam = meeting.team && meeting.team.length > 0;
+        const isPrivate = meeting.isPrivate;
 
-      // ✅ 3. Invited members can see private meetings
-      if (meeting.invitedMembers?.some(u => u._id.toString() === userId)) {
-        return true;
-      }
+        // Public general meeting → everyone sees
+        if (!isPrivate && !hasTeam) return true;
 
-      // ✅ 4. Team members (heads/members) can see private team meetings
-      if (meeting.team) {
-        const isTeamHead = meeting.team.heads?.some(headId => headId.toString() === userId);
-        const isTeamMember = meeting.team.members?.some(memberId => memberId.toString() === userId);
-        if (isTeamHead || isTeamMember) return true;
-      }
+        //  Public team-specific meeting → team members + all heads + admin
+        if (!isPrivate && hasTeam) {
+          if (userRole === 'Admin') return true;
 
-      // ❌ 5. Otherwise, not visible
-      return false;
-    });
+          // 1. All heads can see
+          if (userRole === 'Head') return true;
+
+          // 2. Any member of the team
+          const isTeamMember = meeting.team.some(teamObj =>
+            teamObj.members?.some(m => m._id.toString() === userIdStr)
+          );
+
+          return isTeamMember;
+        }
+
+        //  Private general meeting → invited members + all heads + Admin
+        if (isPrivate && !hasTeam) {
+          if (userRole === 'Admin') return true;
+
+          const isInvited = meeting.invitedMembers?.some(u => u._id.toString() === userIdStr);
+          const isHead = userRole === 'Head';
+          return isInvited || isHead;
+        }
+
+        // Private team meeting → invited members + respective team heads + Admin
+        if (isPrivate && hasTeam) {
+          if (userRole === 'Admin') return true;
+
+          const isInvited = meeting.invitedMembers?.some(u => u._id.toString() === userIdStr);
+          const isTeamHead = meeting.team.some(teamObj =>
+            teamObj.heads?.some(h => h._id.toString() === userIdStr)
+          );
+
+          return isInvited || isTeamHead;
+        }
+
+        return false;
+      });
 
     res.status(200).json(visibleMeetings);
+
   } catch (err) {
-    console.error("Error fetching meetings:", err);
-    res.status(500).json({ error: 'Failed to fetch meetings by status' });
+    console.error("Error:", err);
+    res.status(500).json({ error: 'Failed to fetch meetings' });
   }
 };
+
 
 
 exports.getMeetingById = async (req, res) => {
