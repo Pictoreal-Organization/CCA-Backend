@@ -1,5 +1,6 @@
 const { Meeting, User, Team } = require('../models/index');
 // const emailService = require('../services/email.service');
+const admin = require('../config/firebase'); // ✅ 1. Import Firebase
 
 exports.createMeeting = async (req, res) => {
   try {
@@ -8,7 +9,7 @@ exports.createMeeting = async (req, res) => {
       priority, location, onlineLink, team, tags, isPrivate, invitedMembers
     } = req.body;
 
-    // --- Validation (This part is already perfect) ---
+    // --- Validation ---
     if (!title || !description || !dateTime) {
       return res.status(400).json({ msg: "Title, description, and dateTime are required" });
     }
@@ -19,7 +20,7 @@ exports.createMeeting = async (req, res) => {
       return res.status(400).json({ msg: "Provide only location or online link, not both" });
     }
 
-    // --- Create and Save Meeting FIRST ---
+    // --- Create and Save Meeting ---
     const meeting = new Meeting({
       title,
       description,
@@ -36,11 +37,9 @@ exports.createMeeting = async (req, res) => {
       invitedMembers: invitedMembers || []
     });
     
-    // ✅ FIX: Save the meeting to the database immediately.
-    // This ensures the meeting exists before any emails are sent.
     await meeting.save();
 
-    // --- Email Notification Logic (This part is already perfect) ---
+    // --- Email & Notification Recipient Logic ---
     const recipientEmails = new Set();
     const recipientUsers = [];
 
@@ -86,7 +85,27 @@ exports.createMeeting = async (req, res) => {
       }
     }
 
-    // 5. Send the email to the unique list of recipients
+    // --- ✅ NEW: FCM NOTIFICATION LOGIC ---
+    // We reuse 'recipientUsers' because it already contains everyone who should be notified
+    if (recipientUsers.length > 0) {
+      // Format the date nicely for the notification body
+      const dateStr = new Date(dateTime).toLocaleString('en-US', { 
+        month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric' 
+      });
+
+      await sendFcmNotification(
+        recipientUsers,
+        'New Meeting Scheduled 📅',
+        `${title}\nOn: ${dateStr}`, // e.g. "General Meet\nOn: Nov 20, 10:00 AM"
+        { 
+          meetingId: meeting._id.toString(), 
+          type: 'MEETING_CREATED' 
+        }
+      );
+    }
+    // --- END NOTIFICATION LOGIC ---
+
+    // 5. Send the email (Existing logic commented out)
     // if (recipientUsers.length > 0) {
     //   emailService.sendMeetingCreationEmail(meeting, organizer, recipientUsers);
     // }
@@ -94,6 +113,7 @@ exports.createMeeting = async (req, res) => {
     res.status(201).json({ msg: "Meeting created successfully", meeting });
 
   } catch (err) {
+    console.error("Create meeting error:", err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -308,46 +328,39 @@ exports.deleteMeeting = async (req, res) => {
     // Delete the meeting
     await Meeting.findByIdAndDelete(id);
 
-    // (Optional) Send cancellation email
-    try {
-      const organizer = await User.findById(meeting.organizer);
-      const recipientEmails = new Set();
-      const recipientUsers = [];
-
-      // Add invited members
-      if (meeting.invitedMembers?.length > 0) {
-        const invited = await User.find({ _id: { $in: meeting.invitedMembers } });
-        invited.forEach(u => {
-          if (!recipientEmails.has(u.email)) {
-            recipientEmails.add(u.email);
-            recipientUsers.push(u);
-          }
-        });
-      }
-
-      // Add team members if applicable
-      if (meeting.team) {
-        const teamData = await Team.findById(meeting.team).populate('members').populate('heads');
-        if (teamData) {
-          [...teamData.members, ...teamData.heads].forEach(u => {
-            if (!recipientEmails.has(u.email)) {
-              recipientEmails.add(u.email);
-              recipientUsers.push(u);
-            }
-          });
-        }
-      }
-
-      // Send cancellation email (if your email service supports it)
-      // if (recipientUsers.length > 0) {
-      //   emailService.sendMeetingCancellationEmail(meeting, organizer, recipientUsers);
-      // }
-    } catch (emailErr) {
-      console.warn("Failed to send cancellation email:", emailErr.message);
-    }
-
+    // (Optional) Send cancellation email/notification could go here using logic similar to create
+    
     res.status(200).json({ msg: "Meeting deleted successfully" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
+
+// --- ✅ HELPER FUNCTION (Paste this at the bottom) ---
+const sendFcmNotification = async (users, title, body, data) => {
+    try {
+      let allTokens = [];
+      
+      users.forEach(user => {
+        if (user.fcmTokens && Array.isArray(user.fcmTokens)) {
+          allTokens.push(...user.fcmTokens);
+        }
+      });
+  
+      allTokens = [...new Set(allTokens.filter(t => t))];
+  
+      if (allTokens.length === 0) return;
+  
+      const message = {
+        notification: { title: title, body: body },
+        data: data || {},
+        tokens: allTokens,
+      };
+  
+      await admin.messaging().sendEachForMulticast(message);
+      console.log(`🔔 Sent notifications for meeting: ${title}`);
+      
+    } catch (error) {
+      console.error("Error in sendFcmNotification:", error);
+    }
+  };
