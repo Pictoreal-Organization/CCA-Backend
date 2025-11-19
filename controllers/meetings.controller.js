@@ -1,7 +1,7 @@
 const { Meeting, User, Team } = require('../models/index');
-// const emailService = require('../services/email.service');
-const admin = require('../config/firebase'); // ✅ 1. Import Firebase
+const admin = require('../config/firebase'); // ✅ Import Firebase
 
+// --- 1. CREATE MEETING ---
 exports.createMeeting = async (req, res) => {
   try {
     const {
@@ -9,7 +9,7 @@ exports.createMeeting = async (req, res) => {
       priority, location, onlineLink, team, tags, isPrivate, invitedMembers
     } = req.body;
 
-    // --- Validation ---
+    // Validation
     if (!title || !description || !dateTime) {
       return res.status(400).json({ msg: "Title, description, and dateTime are required" });
     }
@@ -20,7 +20,6 @@ exports.createMeeting = async (req, res) => {
       return res.status(400).json({ msg: "Provide only location or online link, not both" });
     }
 
-    // --- Create and Save Meeting ---
     const meeting = new Meeting({
       title,
       description,
@@ -39,76 +38,22 @@ exports.createMeeting = async (req, res) => {
     
     await meeting.save();
 
-    // --- Email & Notification Recipient Logic ---
-    const recipientEmails = new Set();
-    const recipientUsers = [];
+    // --- Notification Logic ---
+    const recipientUsers = await getMeetingRecipients(meeting);
+    const finalRecipients = recipientUsers.filter(u => u._id.toString() !== req.user._id.toString());
 
-    // 1. Get the organizer's full user object
-    const organizer = await User.findById(req.user._id);
-
-    // 2. Get all users with the 'Head' role
-    const heads = await User.find({ role: 'Head' });
-    heads.forEach(head => {
-      if (!recipientEmails.has(head.email)) {
-        recipientEmails.add(head.email);
-        recipientUsers.push(head);
-      }
-    });
-
-    // 3. Get specifically invited members
-    if (invitedMembers && invitedMembers.length > 0) {
-      const invited = await User.find({ '_id': { $in: invitedMembers } });
-      invited.forEach(user => {
-        if (!recipientEmails.has(user.email)) {
-          recipientEmails.add(user.email);
-          recipientUsers.push(user);
-        }
-      });
-    }
-
-    // 4. If it's a team meeting, get all team members and heads
-    if (team) {
-      const teamData = await Team.findById(team).populate('members').populate('heads');
-      if (teamData) {
-        teamData.members.forEach(user => {
-          if (!recipientEmails.has(user.email)) {
-            recipientEmails.add(user.email);
-            recipientUsers.push(user);
-          }
-        });
-        teamData.heads.forEach(user => {
-          if (!recipientEmails.has(user.email)) {
-            recipientEmails.add(user.email);
-            recipientUsers.push(user);
-          }
-        });
-      }
-    }
-
-    // --- ✅ NEW: FCM NOTIFICATION LOGIC ---
-    // We reuse 'recipientUsers' because it already contains everyone who should be notified
-    if (recipientUsers.length > 0) {
-      // Format the date nicely for the notification body
+    if (finalRecipients.length > 0) {
       const dateStr = new Date(dateTime).toLocaleString('en-US', { 
         month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric' 
       });
 
       await sendFcmNotification(
-        recipientUsers,
+        finalRecipients,
         'New Meeting Scheduled 📅',
-        `${title}\nOn: ${dateStr}`, // e.g. "General Meet\nOn: Nov 20, 10:00 AM"
-        { 
-          meetingId: meeting._id.toString(), 
-          type: 'MEETING_CREATED' 
-        }
+        `${title}\nOn: ${dateStr}`,
+        { meetingId: meeting._id.toString(), type: 'MEETING_CREATED' }
       );
     }
-    // --- END NOTIFICATION LOGIC ---
-
-    // 5. Send the email (Existing logic commented out)
-    // if (recipientUsers.length > 0) {
-    //   emailService.sendMeetingCreationEmail(meeting, organizer, recipientUsers);
-    // }
     
     res.status(201).json({ msg: "Meeting created successfully", meeting });
 
@@ -118,12 +63,98 @@ exports.createMeeting = async (req, res) => {
   }
 };
 
+// --- 2. UPDATE MEETING (This was missing!) ---
+exports.updateMeeting = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+
+    const meeting = await Meeting.findById(id);
+    if (!meeting) return res.status(404).json({ msg: "Meeting not found" });
+
+    // Authorization
+    if (
+      req.user.role !== 'Admin' &&
+      req.user.role !== 'Head' &&
+      meeting.organizer.toString() !== req.user._id.toString()
+    ) {
+      return res.status(403).json({ msg: "Not authorized to edit this meeting" });
+    }
+
+    // Perform Update
+    const updatedMeeting = await Meeting.findByIdAndUpdate(id, updateData, { new: true })
+      .populate('team')
+      .populate('invitedMembers');
+
+    // --- Notification Logic ---
+    const recipientUsers = await getMeetingRecipients(updatedMeeting);
+    const finalRecipients = recipientUsers.filter(u => u._id.toString() !== req.user._id.toString());
+
+    if (finalRecipients.length > 0) {
+      const dateStr = new Date(updatedMeeting.dateTime).toLocaleString('en-US', { 
+        month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric' 
+      });
+
+      await sendFcmNotification(
+        finalRecipients,
+        'Meeting Updated ✏️',
+        `Details for "${updatedMeeting.title}" have changed.\nNew time: ${dateStr}`,
+        { meetingId: updatedMeeting._id.toString(), type: 'MEETING_UPDATED' }
+      );
+    }
+
+    res.status(200).json({ msg: "Meeting updated successfully", meeting: updatedMeeting });
+
+  } catch (err) {
+    console.error("Update meeting error:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// --- 3. DELETE MEETING ---
+exports.deleteMeeting = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const meeting = await Meeting.findById(id);
+    if (!meeting) return res.status(404).json({ msg: "Meeting not found" });
+
+    // Authorization
+    if (
+      req.user.role !== 'Admin' &&
+      req.user.role !== 'Head' &&
+      meeting.organizer.toString() !== req.user._id.toString()
+    ) {
+      return res.status(403).json({ msg: "Not authorized to delete this meeting" });
+    }
+
+    // --- Notification Logic (Before Delete) ---
+    const recipientUsers = await getMeetingRecipients(meeting);
+    const finalRecipients = recipientUsers.filter(u => u._id.toString() !== req.user._id.toString());
+
+    if (finalRecipients.length > 0) {
+      await sendFcmNotification(
+        finalRecipients,
+        'Meeting Cancelled ❌',
+        `The meeting "${meeting.title}" has been cancelled.`,
+        { meetingId: meeting._id.toString(), type: 'MEETING_CANCELLED' }
+      );
+    }
+
+    await Meeting.findByIdAndDelete(id);
+
+    res.status(200).json({ msg: "Meeting deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// --- 4. GET ALL MEETINGS ---
 exports.getAllMeetings = async (req, res) => {
   try {
     const userId = req.user._id.toString();
-    const userRole = req.user.role; // Admin / Head / Member
+    const userRole = req.user.role; 
 
-    // Fetch all meetings first
     const meetings = await Meeting.find()
       .populate("team")
       .populate("invitedMembers")
@@ -131,45 +162,27 @@ exports.getAllMeetings = async (req, res) => {
       .sort({ dateTime: 1 });
 
     const visibleMeetings = meetings.filter(meeting => {
-
-      // 1. PUBLIC MEETINGS visible to all
       if (meeting.isPrivate === false) return true;
-
-      // 2. ADMIN can see ALL private meetings
       if (userRole === "Admin") return true;
-
-      // 3. HEAD can see ONLY private meetings they created
-      if (userRole === "Head") {
-        return meeting.organizer._id.toString() === userId;
-      }
-
-      // 4. MEMBER can see private meetings they are invited to
+      if (userRole === "Head") return meeting.organizer._id.toString() === userId;
       if (userRole === "Member") {
-        const isInvited = meeting.invitedMembers.some(
-          u => u._id.toString() === userId
-        );
+        const isInvited = meeting.invitedMembers.some(u => u._id.toString() === userId);
         if (isInvited) return true;
-
-        // also team  meetings
         if (meeting.team) {
-          const isMember = meeting.team.members?.some(
-            m => m.toString() === userId
-          );
+          const isMember = meeting.team.members?.some(m => m.toString() === userId);
           if (isMember) return true;
         }
       }
-
-      return false; // not visible
+      return false;
     });
 
     res.status(200).json(visibleMeetings);
-
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch meetings" });
   }
 };
 
-
+// --- 5. GET UPCOMING ---
 exports.getUpcomingMeetings = async (req, res) => {
   try {
     const now = new Date();
@@ -181,14 +194,13 @@ exports.getUpcomingMeetings = async (req, res) => {
   }
 };
 
-// Get meetings by status
+// --- 6. GET BY STATUS (Simple) ---
 exports.getAllMeetingsByStatus = async (req, res) => {
   try {
-    const { status } = req.params; // pass status in URL
+    const { status } = req.params;
     if (!['scheduled', 'ongoing', 'completed', 'cancelled'].includes(status)) {
       return res.status(400).json({ error: 'Invalid status value' });
     }
-
     const meetings = await Meeting.find({ status }).sort({ dateTime: 1 });
     res.status(200).json(meetings);
   } catch (err) {
@@ -196,12 +208,10 @@ exports.getAllMeetingsByStatus = async (req, res) => {
   }
 };
 
+// --- 7. GET BY STATUS (With Visibility) ---
 exports.getMeetingsByStatus = async (req, res) => {
   try {
     const { status } = req.params;
-    const userId = req.user._id.toString();
-    const userRole = req.user.role;
-
     if (!['scheduled', 'ongoing', 'completed', 'cancelled'].includes(status)) {
       return res.status(400).json({ error: 'Invalid status value' });
     }
@@ -217,150 +227,146 @@ exports.getMeetingsByStatus = async (req, res) => {
       .populate('invitedMembers', '_id name email')
       .populate('organizer', '_id name email');
 
-      const visibleMeetings = meetings.filter(meeting => {
-        const userIdStr = req.user._id.toString();
-        const userRole = req.user.role; // 'Admin', 'Head', 'Member'
+    const userIdStr = req.user._id.toString();
+    const userRole = req.user.role;
 
-        const hasTeam = meeting.team && meeting.team.length > 0;
+    const visibleMeetings = meetings.filter(meeting => {
+        const hasTeam = meeting.team && meeting.team.length > 0; 
         const isPrivate = meeting.isPrivate;
 
-        // Public general meeting → everyone sees
-        if (!isPrivate && !hasTeam) return true;
+        if (!isPrivate && !meeting.team) return true;
 
-        //  Public team-specific meeting → team members + all heads + admin
-        if (!isPrivate && hasTeam) {
-          if (userRole === 'Admin') return true;
-
-          // 1. All heads can see
-          if (userRole === 'Head') return true;
-
-          // 2. Any member of the team
-          const isTeamMember = meeting.team.some(teamObj =>
-            teamObj.members?.some(m => m._id.toString() === userIdStr)
-          );
-
-          return isTeamMember;
+        if (!isPrivate && meeting.team) {
+          if (userRole === 'Admin' || userRole === 'Head') return true;
+          if (meeting.team.members) {
+             return meeting.team.members.some(m => m._id.toString() === userIdStr);
+          }
+          return false; 
         }
 
-        //  Private general meeting → invited members + all heads + Admin
-        if (isPrivate && !hasTeam) {
+        if (isPrivate) {
           if (userRole === 'Admin') return true;
-
           const isInvited = meeting.invitedMembers?.some(u => u._id.toString() === userIdStr);
-          const isHead = userRole === 'Head';
-          return isInvited || isHead;
+          const isHead = userRole === 'Head'; 
+          const isTeamHead = meeting.team?.heads?.some(h => h._id.toString() === userIdStr);
+          return isInvited || (isHead && hasTeam && isTeamHead); 
         }
-
-        // Private team meeting → invited members + respective team heads + Admin
-        if (isPrivate && hasTeam) {
-          if (userRole === 'Admin') return true;
-
-          const isInvited = meeting.invitedMembers?.some(u => u._id.toString() === userIdStr);
-          const isTeamHead = meeting.team.some(teamObj =>
-            teamObj.heads?.some(h => h._id.toString() === userIdStr)
-          );
-
-          return isInvited || isTeamHead;
-        }
-
         return false;
-      });
+    });
 
     res.status(200).json(visibleMeetings);
-
   } catch (err) {
     console.error("Error:", err);
     res.status(500).json({ error: 'Failed to fetch meetings' });
   }
 };
 
-
-
+// --- 8. GET BY ID ---
 exports.getMeetingById = async (req, res) => {
   try {
     const meeting = await Meeting.findById(req.params.id);
-    if (!meeting) {
-      return res.status(404).json({ message: "Meeting not found" });
-    }
+    if (!meeting) return res.status(404).json({ message: "Meeting not found" });
     res.status(200).json(meeting);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch meeting' });
   }
 };
 
-//  Get meetings eligible for attendance marking
+// --- 9. GET FOR ATTENDANCE ---
 exports.getMeetingsForAttendance = async (req, res) => {
   try {
     const now = new Date();
-
-    // Completed meetings in last 2 days
     const meetings = await Meeting.find({
       status: 'completed',
       dateTime: { $gte: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000) }
     });
-
     res.status(200).json(meetings);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-// Delete a meeting
-exports.deleteMeeting = async (req, res) => {
-  try {
-    const { id } = req.params;
+// ==========================================
+//           HELPER FUNCTIONS
+// ==========================================
 
-    // Find meeting by ID
-    const meeting = await Meeting.findById(id);
-    if (!meeting) {
-      return res.status(404).json({ msg: "Meeting not found" });
+// 1. Helper to gather recipients
+const getMeetingRecipients = async (meeting) => {
+  const recipientEmails = new Set();
+  const recipientUsers = [];
+
+  // Global Heads
+  const heads = await User.find({ role: 'Head' });
+  heads.forEach(head => {
+    if (!recipientEmails.has(head.email)) {
+      recipientEmails.add(head.email);
+      recipientUsers.push(head);
     }
+  });
 
-    // Optional: Allow only Admin, Head, or the organizer to delete
-    if (
-      req.user.role !== 'Admin' &&
-      req.user.role !== 'Head' &&
-      meeting.organizer.toString() !== req.user._id.toString()
-    ) {
-      return res.status(403).json({ msg: "You are not authorized to delete this meeting" });
+  // Invited Members
+  if (meeting.invitedMembers && meeting.invitedMembers.length > 0) {
+    let invited = meeting.invitedMembers;
+    if (invited.length > 0 && !invited[0].email) { 
+       invited = await User.find({ '_id': { $in: meeting.invitedMembers } });
     }
-
-    // Delete the meeting
-    await Meeting.findByIdAndDelete(id);
-
-    // (Optional) Send cancellation email/notification could go here using logic similar to create
-    
-    res.status(200).json({ msg: "Meeting deleted successfully" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    invited.forEach(user => {
+      if (user && user.email && !recipientEmails.has(user.email)) {
+        recipientEmails.add(user.email);
+        recipientUsers.push(user);
+      }
+    });
   }
+
+  // Team Members & Heads
+  if (meeting.team) {
+    let teamData = meeting.team;
+    if (!teamData.members && !teamData.heads) {
+        teamData = await Team.findById(meeting.team).populate('members').populate('heads');
+    }
+    if (teamData) {
+      if (teamData.members) {
+        teamData.members.forEach(user => {
+          if (user && !recipientEmails.has(user.email)) {
+            recipientEmails.add(user.email);
+            recipientUsers.push(user);
+          }
+        });
+      }
+      if (teamData.heads) {
+        teamData.heads.forEach(user => {
+          if (user && !recipientEmails.has(user.email)) {
+            recipientEmails.add(user.email);
+            recipientUsers.push(user);
+          }
+        });
+      }
+    }
+  }
+  return recipientUsers;
 };
 
-// --- ✅ HELPER FUNCTION (Paste this at the bottom) ---
+// 2. Helper to send FCM
 const sendFcmNotification = async (users, title, body, data) => {
-    try {
-      let allTokens = [];
-      
-      users.forEach(user => {
-        if (user.fcmTokens && Array.isArray(user.fcmTokens)) {
-          allTokens.push(...user.fcmTokens);
-        }
-      });
-  
-      allTokens = [...new Set(allTokens.filter(t => t))];
-  
-      if (allTokens.length === 0) return;
-  
-      const message = {
-        notification: { title: title, body: body },
-        data: data || {},
-        tokens: allTokens,
-      };
-  
-      await admin.messaging().sendEachForMulticast(message);
-      console.log(`🔔 Sent notifications for meeting: ${title}`);
-      
-    } catch (error) {
-      console.error("Error in sendFcmNotification:", error);
-    }
-  };
+  try {
+    let allTokens = [];
+    users.forEach(user => {
+      if (user.fcmTokens && Array.isArray(user.fcmTokens)) {
+        allTokens.push(...user.fcmTokens);
+      }
+    });
+    allTokens = [...new Set(allTokens.filter(t => t))];
+    if (allTokens.length === 0) return;
+
+    const message = {
+      notification: { title, body },
+      data: data || {},
+      tokens: allTokens,
+    };
+
+    await admin.messaging().sendEachForMulticast(message);
+    console.log(`🔔 Sent notifications for: ${title}`);
+  } catch (error) {
+    console.error("Error in sendFcmNotification:", error);
+  }
+};
