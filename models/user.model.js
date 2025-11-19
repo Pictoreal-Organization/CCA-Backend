@@ -52,7 +52,7 @@ userSchema.methods.generateRefreshToken = function () {
   return jwt.sign(
     { id: this._id, role: this.role, email: this.email },
     process.env.JWT_REFRESH_SECRET,
-    { expiresIn: '7d' }
+    { expiresIn: '90d' }
   );
 };
 
