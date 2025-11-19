@@ -20,6 +20,7 @@ const userSchema = new Schema({
 
   // Relationships
   team: [{ type: Schema.Types.ObjectId, ref: 'Team' }],
+  fcmTokens: [{ type: String }],
 
   // Tracking
   tasksAssigned: [{ type: Schema.Types.ObjectId, ref: 'Task' }],

@@ -11,7 +11,7 @@ const { User, Team } = require('./models/index');
 (async () => {
   const results = [];
 
-  fs.createReadStream('All_csvs/members.csv')
+  fs.createReadStream('core_team.csv')
     .pipe(csv())
     .on('data', (data) => results.push(data))
     .on('end', async () => {
@@ -67,6 +67,7 @@ const { User, Team } = require('./models/index');
               phone,
               initialPassword,
               role: 'Member',
+              fcmTokens: [],
             });
             console.log(`🆕 Creating new user: ${email}`);
           }

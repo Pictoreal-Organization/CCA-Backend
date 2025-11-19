@@ -12,4 +12,6 @@ router.post('/request-password-change', authController.requestPasswordChange);
 router.post('/verify-otp', authController.verifyOTP);
 router.post('/change-password-otp', authController.changePasswordWithOTP);
 
+router.put('/fcm-token', authMiddleware, authController.saveFcmToken)
+
 module.exports = router;
