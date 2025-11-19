@@ -236,6 +236,8 @@ exports.getMeetingsByStatus = async (req, res) => {
 
         if (!isPrivate && !meeting.team) return true;
 
+        if (!meeting.team && (userRole === 'Admin' || userRole === 'Head')) return true;
+
         if (!isPrivate && meeting.team) {
           if (userRole === 'Admin' || userRole === 'Head') return true;
           if (meeting.team.members) {
