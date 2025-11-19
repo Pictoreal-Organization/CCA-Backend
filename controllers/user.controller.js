@@ -31,7 +31,7 @@ exports.updateUserProfile = async (req, res) => {
 
 exports.getAllUsers = async (req, res) => {
   try {
-    const users = await User.find({}, 'username name email role year division initialPassword');
+    const users = await User.find({}, 'username name email rollNo role year division initialPassword');
     res.json(users);
   } catch (err) {
     res.status(500).json({ error: err.message });
