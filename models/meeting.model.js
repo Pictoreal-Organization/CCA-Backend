@@ -23,7 +23,7 @@ const meetingSchema = new Schema({
   },
   tags: {
     type: [String], // multiple tags possible
-    enum: ['General', 'Impactathon', 'PictoFest', 'BDD'], // define your enums here
+    // enum: ['General', 'Impactathon', 'PictoFest', 'BDD'], // define your enums here
     default: []
   },
   isPrivate: { type: Boolean, default: false }, // private or public meeting

@@ -25,6 +25,7 @@ const userRoutes = require('./routes/user.route');
 const adminRoutes = require('./routes/admin.route');
 const attendanceRoutes = require('./routes/attendance.route');
 const teamRoutes = require('./routes/team.route');
+const tagRoutes = require('./routes/tags.route');
 
 app.use('/api/meetings/', meetingRoutes);
 app.use('/api/tasks/', taskRoutes);
@@ -33,6 +34,7 @@ app.use('/api/user/', userRoutes);
 app.use('/api/admin/', adminRoutes);
 app.use('/api/attendance/', attendanceRoutes);
 app.use('/api/teams/', teamRoutes);
+app.use('/api/tag/', tagRoutes);
 
 app.get('/', (req, res) => {
   console.log("Works");
