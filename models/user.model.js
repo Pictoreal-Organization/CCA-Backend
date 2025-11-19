@@ -22,10 +22,6 @@ const userSchema = new Schema({
   team: [{ type: Schema.Types.ObjectId, ref: 'Team' }],
   fcmTokens: [{ type: String }],
 
-  // Tracking
-  tasksAssigned: [{ type: Schema.Types.ObjectId, ref: 'Task' }],
-  eventsScheduled: [{ type: Schema.Types.ObjectId, ref: 'Meeting' }],
-
   // Security
   initialPassword: { type: String },  
   passwordChanged: { type: Boolean, default: false },
