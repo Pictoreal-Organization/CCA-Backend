@@ -87,6 +87,7 @@ const { User, Team } = require('./models/index');
               rollNo,
               initialPassword,
               role: "Head",
+              fcmTokens: [],
             });
           } else {
             user.username = username;
@@ -97,6 +98,9 @@ const { User, Team } = require('./models/index');
             user.rollNo = rollNo;
             user.role = "Head";
             user.initialPassword = user.initialPassword || initialPassword;
+            if (!user.fcmTokens) {
+                user.fcmTokens = [];
+            }
           }
 
           await user.save(); // ensures user._id exists

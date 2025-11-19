@@ -11,7 +11,7 @@ const { User, Team } = require('./models/index');
 (async () => {
   const results = [];
 
-  fs.createReadStream('core_team.csv')
+  fs.createReadStream('All_csvs/members.csv')
     .pipe(csv())
     .on('data', (data) => results.push(data))
     .on('end', async () => {
@@ -54,6 +54,9 @@ const { User, Team } = require('./models/index');
             user.initialPassword = user.initialPassword || initialPassword;
             user.role = 'Member';
             console.log(`🔄 Updating existing user: ${email}`);
+            if (!user.fcmTokens) {
+                user.fcmTokens = [];
+            }
           } else {
             // ✅ Create new user
             user = new User({
