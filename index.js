@@ -34,7 +34,7 @@ app.use('/api/user/', userRoutes);
 app.use('/api/admin/', adminRoutes);
 app.use('/api/attendance/', attendanceRoutes);
 app.use('/api/teams/', teamRoutes);
-app.use('/api/tag/', tagRoutes);
+app.use('/api/tags/', tagRoutes);
 
 app.get('/', (req, res) => {
   console.log("Works");
