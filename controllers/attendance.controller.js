@@ -121,6 +121,7 @@ exports.getAttendanceForMeeting = async (req, res) => {
           email: user.email,
           year: user.year,
           division: user.division,
+          avatar: user.avatar,
         },
         status: status,
       };
