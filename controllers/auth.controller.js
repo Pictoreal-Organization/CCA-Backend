@@ -1,5 +1,8 @@
 const { User } = require('../models/index');
 const emailService = require('../services/email.service');
+const { OAuth2Client } = require('google-auth-library');
+
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 exports.register = async (req, res) => {
   try {
@@ -36,6 +39,46 @@ exports.login = async (req, res) => {
     res.json({ accessToken, refreshToken, role: user.role });
   } catch (err) {
     res.status(500).json({ msg: err.message });
+  }
+};
+
+exports.googleLogin = async (req, res) => {
+  const { token } = req.body; // The ID Token from Flutter
+
+  try {
+    // 1. Verify the token with Google
+    const ticket = await client.verifyIdToken({
+      idToken: token,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    
+    const { email, name, picture } = ticket.getPayload();
+
+    // 2. Check if user exists in DB
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      // ⛔ BLOCK: If email isn't in DB, reject login
+      return res.status(401).json({ 
+        msg: "Access Denied. This email is not registered with the club." 
+      });
+    }
+
+    // 3. (Optional) Update avatar/name if empty
+    if (!user.avatar) user.avatar = picture;
+    
+    // 4. Generate Tokens
+    const accessToken = user.generateAccessToken();
+    const refreshToken = user.generateRefreshToken();
+
+    user.refreshToken = refreshToken;
+    await user.save();
+
+    res.json({ accessToken, refreshToken, role: user.role });
+
+  } catch (err) {
+    console.error("Google Auth Error:", err);
+    res.status(500).json({ msg: "Google Authentication Failed" });
   }
 };
 

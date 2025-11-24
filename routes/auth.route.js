@@ -14,4 +14,6 @@ router.post('/change-password-otp', authController.changePasswordWithOTP);
 
 router.put('/fcm-token', authMiddleware, authController.saveFcmToken)
 
+router.post('/google', authController.googleLogin);
+
 module.exports = router;
