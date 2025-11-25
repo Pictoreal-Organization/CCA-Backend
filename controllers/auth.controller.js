@@ -1,7 +1,7 @@
 const { User } = require('../models/index');
 const emailService = require('../services/email.service');
 const { OAuth2Client } = require('google-auth-library');
-
+const fetch = require('node-fetch');
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 exports.register = async (req, res) => {
@@ -42,42 +42,111 @@ exports.login = async (req, res) => {
   }
 };
 
+// exports.googleLogin = async (req, res) => {
+//   const { token } = req.body; // The ID Token from Flutter
+
+//   try {
+//     // 1. Verify the token with Google
+//     const ticket = await client.verifyIdToken({
+//       idToken: token,
+//       audience: process.env.GOOGLE_CLIENT_ID,
+//     });
+    
+//     const { email, name, picture } = ticket.getPayload();
+
+//     // 2. Check if user exists in DB
+//     let user = await User.findOne({ email });
+
+//     if (!user) {
+//       // ⛔ BLOCK: If email isn't in DB, reject login
+//       return res.status(401).json({ 
+//         msg: "Access Denied. This email is not registered with the club." 
+//       });
+//     }
+
+//     // 3. (Optional) Update avatar/name if empty
+//     if (!user.avatar) user.avatar = picture;
+    
+//     // 4. Generate Tokens
+//     const accessToken = user.generateAccessToken();
+//     const refreshToken = user.generateRefreshToken();
+
+//     user.refreshToken = refreshToken;
+//     await user.save();
+
+//     res.json({ accessToken, refreshToken, role: user.role });
+
+//   } catch (err) {
+//     console.error("Google Auth Error:", err);
+//     res.status(500).json({ msg: "Google Authentication Failed" });
+//   }
+// };
+
 exports.googleLogin = async (req, res) => {
-  const { token } = req.body; // The ID Token from Flutter
+  const { token, isWeb } = req.body;
 
   try {
-    // 1. Verify the token with Google
-    const ticket = await client.verifyIdToken({
-      idToken: token,
-      audience: process.env.GOOGLE_CLIENT_ID,
-    });
-    
-    const { email, name, picture } = ticket.getPayload();
+    let email, name, picture;
 
-    // 2. Check if user exists in DB
+    if (isWeb) {
+      // ✅ For web: Use access token to fetch user info
+      console.log("🌐 Verifying web access token...");
+      
+      const response = await fetch(
+        `https://www.googleapis.com/oauth2/v3/userinfo?access_token=${token}`
+      );
+      
+      if (!response.ok) {
+        return res.status(401).json({ msg: "Invalid access token" });
+      }
+      
+      const userInfo = await response.json();
+      email = userInfo.email;
+      name = userInfo.name;
+      picture = userInfo.picture;
+      
+    } else {
+      // ✅ For mobile: Verify ID token
+      console.log("📱 Verifying mobile ID token...");
+      
+      const ticket = await client.verifyIdToken({
+        idToken: token,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+      
+      const payload = ticket.getPayload();
+      email = payload.email;
+      name = payload.name;
+      picture = payload.picture;
+    }
+
+    console.log(`✅ Authenticated user: ${email}`);
+
+    // Check if user exists in DB
     let user = await User.findOne({ email });
 
     if (!user) {
-      // ⛔ BLOCK: If email isn't in DB, reject login
       return res.status(401).json({ 
         msg: "Access Denied. This email is not registered with the club." 
       });
     }
 
-    // 3. (Optional) Update avatar/name if empty
-    if (!user.avatar) user.avatar = picture;
+    // Update avatar/name if empty
+    if (!user.avatar && picture) user.avatar = picture;
+    if (!user.username && name) user.username = name;
     
-    // 4. Generate Tokens
+    // Generate Tokens
     const accessToken = user.generateAccessToken();
     const refreshToken = user.generateRefreshToken();
 
     user.refreshToken = refreshToken;
     await user.save();
 
+    console.log(`✅ Login successful for ${email}`);
     res.json({ accessToken, refreshToken, role: user.role });
 
   } catch (err) {
-    console.error("Google Auth Error:", err);
+    console.error("❌ Google Auth Error:", err);
     res.status(500).json({ msg: "Google Authentication Failed" });
   }
 };

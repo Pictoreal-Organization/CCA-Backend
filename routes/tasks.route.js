@@ -6,15 +6,16 @@ const { authMiddleware, adminOrHeadOnly } = require('../middlewares/auth.middlew
 router.get('/', authMiddleware, tasksController.getAllTasks);
 router.get('/team/:teamId', authMiddleware, tasksController.getTasksByTeam);
 router.get('/user/:userId', authMiddleware, tasksController.getTasksByUser);
-router.get('/status/:status', authMiddleware, tasksController.getTasksByStatus);
-router.get('/:id', authMiddleware, tasksController.getTaskById);
 router.get('/user/:userId/completed', authMiddleware, tasksController.getCompletedTasksByUser);
 router.get('/team/:teamId/completed', authMiddleware, adminOrHeadOnly, tasksController.getCompletedTasksByTeam);
+router.get('/status/:status', authMiddleware, tasksController.getTasksByStatus);
+
+// KEEP THIS LAST
+router.get('/:id', authMiddleware, tasksController.getTaskById);
 
 router.post('/create', authMiddleware, adminOrHeadOnly, tasksController.createTask);
 router.delete('/delete/:id', authMiddleware, adminOrHeadOnly, tasksController.deleteTask);
 router.put('/update/:id', authMiddleware, tasksController.updateTask);
 router.put('/:taskId/subtasks/:subtaskId/status', authMiddleware, tasksController.updateSubtask);
-
 
 module.exports = router;
