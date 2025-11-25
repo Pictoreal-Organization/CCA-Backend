@@ -32,3 +32,4 @@ build/
 
 # dotenvx
 .env.build
+firebase-service-account.json.json
