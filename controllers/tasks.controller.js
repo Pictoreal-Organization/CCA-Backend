@@ -83,12 +83,15 @@ exports.updateSubtask = async (req, res) => {
 
     await task.save();
 
+    console.log(`User Role: ${role}, User Name: ${userName}`)
+
     // --- 🔔 NOTIFICATION: Subtask Status Changed ---
     
     // 1. If Member Changed Status -> Notify Heads
     if (role === 'Member') {
       // Find heads of the team this task belongs to
       const team = await Team.findById(task.team);
+      console.log(`Task Team: ${task.team}, Team Heads: ${team ? team.heads : 'None'}`);
       if (team && team.heads.length > 0) {
          await sendNotificationToUsers(
             team.heads,
@@ -101,6 +104,7 @@ exports.updateSubtask = async (req, res) => {
 
     // 2. If Head Changed Status (e.g. Asked for Changes) -> Notify Assigned Member
     if (role === 'Head' || role === 'Admin') {
+      console.log(`Subtask Assigned To: ${subtask.assignedTo}`);
       await sendNotificationToUsers(
         subtask.assignedTo,
         `⚠️ Update on your Subtask`,
@@ -110,7 +114,9 @@ exports.updateSubtask = async (req, res) => {
     }
 
     res.json({ message: 'Subtask updated', task });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { 
+    console.error(err); // <--- Ensure you see errors
+    res.status(500).json({ error: err.message }); }
 };
 
 exports.getAllTasks = async (req, res) => {
