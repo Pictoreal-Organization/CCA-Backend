@@ -1,149 +1,136 @@
 const { Meeting, User, Team } = require('../models/index');
-const admin = require('../config/firebase'); // ✅ Import Firebase
+const admin = require('../config/firebase'); 
 
-// --- 1. CREATE MEETING ---
+// Helper to send notifications
+const sendNotificationToUsers = async (userIds, title, body, data) => {
+  try {
+    // 1. Fetch users with their tokens
+    const users = await User.find({ '_id': { $in: userIds } }).select('fcmTokens');
+    
+    // 2. Flatten all tokens into one array
+    let tokens = [];
+    users.forEach(u => {
+      if (u.fcmTokens && u.fcmTokens.length > 0) {
+        tokens.push(...u.fcmTokens);
+      }
+    });
+
+    // 3. Send Multicast if tokens exist
+    if (tokens.length > 0) {
+      await admin.messaging().sendEachForMulticast({
+        tokens: tokens,
+        notification: { title, body },
+        data: data || {} // Data payload for redirection
+      });
+      console.log(`🔔 Notification sent: ${title}`);
+    }
+  } catch (err) {
+    console.error("❌ Notification Error:", err);
+  }
+};
+
+// Helper to get all recipients for a meeting
+const getMeetingRecipients = async (meeting) => {
+  const recipientIds = new Set();
+
+  // 1. Add Team Members & Heads
+  if (meeting.team && meeting.team.length > 0) {
+    const teams = await Team.find({ '_id': { $in: meeting.team } });
+    teams.forEach(t => {
+      t.members.forEach(m => recipientIds.add(m.toString()));
+      t.heads.forEach(h => recipientIds.add(h.toString()));
+    });
+  }
+
+  // 2. Add Invited Members
+  if (meeting.invitedMembers && meeting.invitedMembers.length > 0) {
+    meeting.invitedMembers.forEach(m => recipientIds.add(m.toString()));
+  }
+
+  // 3. Add Global Heads (if policy requires, optional)
+  // const heads = await User.find({ role: 'Head' });
+  // heads.forEach(h => recipientIds.add(h._id.toString()));
+
+  return Array.from(recipientIds);
+};
+
 exports.createMeeting = async (req, res) => {
   try {
-    const {
-      title, description, agenda, dateTime, duration,
-      priority, location, onlineLink, team, tags, isPrivate, invitedMembers
-    } = req.body;
-
-    // Validation
-    if (!title || !description || !dateTime) {
-      return res.status(400).json({ msg: "Title, description, and dateTime are required" });
-    }
-    if ((!location || location.trim() === '') && (!onlineLink || onlineLink.trim() === '')) {
-      return res.status(400).json({ msg: "Provide either a location or an online link" });
-    }
-    if (location && onlineLink) {
-      return res.status(400).json({ msg: "Provide only location or online link, not both" });
-    }
-
-    const meeting = new Meeting({
-      title,
-      description,
-      agenda,
-      dateTime,
-      duration,
-      priority,
-      location: location || null,
-      onlineLink: onlineLink || null,
-      organizer: req.user._id,
-      team: team || null,
-      tags: tags || [],
-      isPrivate: isPrivate || false,
-      invitedMembers: invitedMembers || []
-    });
-    
+    const meeting = new Meeting({ ...req.body, organizer: req.user._id });
     await meeting.save();
 
-    // --- Notification Logic ---
-    const recipientUsers = await getMeetingRecipients(meeting);
-    const finalRecipients = recipientUsers.filter(u => u._id.toString() !== req.user._id.toString());
+    // --- 🔔 NOTIFICATION: Meeting Created ---
+    const recipients = await getMeetingRecipients(meeting);
+    const finalRecipients = recipients.filter(id => id !== req.user._id.toString()); // Exclude self
 
-    if (finalRecipients.length > 0) {
-      const dateStr = new Date(dateTime).toLocaleString('en-US', { 
+    const dateStr = new Date(meeting.dateTime).toLocaleString('en-US', { 
         month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric' 
-      });
+    });
 
-      await sendFcmNotification(
-        finalRecipients,
-        'New Meeting Scheduled 📅',
-        `${title}\nOn: ${dateStr}`,
-        { meetingId: meeting._id.toString(), type: 'MEETING_CREATED' }
-      );
-    }
-    
-    res.status(201).json({ msg: "Meeting created successfully", meeting });
+    await sendNotificationToUsers(
+      finalRecipients,
+      '📅 New Meeting Scheduled',
+      `${meeting.title}\nOn: ${dateStr}`,
+      { 
+        type: 'MEETING_CREATED', 
+        meetingId: meeting._id.toString() 
+      }
+    );
 
+    res.status(201).json(meeting);
   } catch (err) {
-    console.error("Create meeting error:", err);
     res.status(500).json({ error: err.message });
   }
 };
 
-// --- 2. UPDATE MEETING (This was missing!) ---
 exports.updateMeeting = async (req, res) => {
   try {
-    const { id } = req.params;
-    const updateData = req.body;
+    const meeting = await Meeting.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    
+    // --- 🔔 NOTIFICATION: Meeting Edited ---
+    const recipients = await getMeetingRecipients(meeting);
+    const finalRecipients = recipients.filter(id => id !== req.user._id.toString());
 
-    const meeting = await Meeting.findById(id);
-    if (!meeting) return res.status(404).json({ msg: "Meeting not found" });
-
-    // Authorization
-    if (
-      req.user.role !== 'Admin' &&
-      req.user.role !== 'Head' &&
-      meeting.organizer.toString() !== req.user._id.toString()
-    ) {
-      return res.status(403).json({ msg: "Not authorized to edit this meeting" });
-    }
-
-    // Perform Update
-    const updatedMeeting = await Meeting.findByIdAndUpdate(id, updateData, { new: true })
-      .populate('team')
-      .populate('invitedMembers');
-
-    // --- Notification Logic ---
-    const recipientUsers = await getMeetingRecipients(updatedMeeting);
-    const finalRecipients = recipientUsers.filter(u => u._id.toString() !== req.user._id.toString());
-
-    if (finalRecipients.length > 0) {
-      const dateStr = new Date(updatedMeeting.dateTime).toLocaleString('en-US', { 
+    const dateStr = new Date(meeting.dateTime).toLocaleString('en-US', { 
         month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric' 
-      });
+    });
 
-      await sendFcmNotification(
-        finalRecipients,
-        'Meeting Updated ✏️',
-        `Details for "${updatedMeeting.title}" have changed.\nNew time: ${dateStr}`,
-        { meetingId: updatedMeeting._id.toString(), type: 'MEETING_UPDATED' }
-      );
-    }
+    await sendNotificationToUsers(
+      finalRecipients,
+      '✏️ Meeting Updated',
+      `Details for "${meeting.title}" have changed.\nNew Info: ${dateStr}`,
+      { 
+        type: 'MEETING_UPDATED', 
+        meetingId: meeting._id.toString() 
+      }
+    );
 
-    res.status(200).json({ msg: "Meeting updated successfully", meeting: updatedMeeting });
-
+    res.json(meeting);
   } catch (err) {
-    console.error("Update meeting error:", err);
     res.status(500).json({ error: err.message });
   }
 };
 
-// --- 3. DELETE MEETING ---
 exports.deleteMeeting = async (req, res) => {
   try {
-    const { id } = req.params;
+    const meeting = await Meeting.findById(req.params.id);
+    if (!meeting) return res.status(404).json({ msg: "Not Found" });
 
-    const meeting = await Meeting.findById(id);
-    if (!meeting) return res.status(404).json({ msg: "Meeting not found" });
+    // --- 🔔 NOTIFICATION: Meeting Cancelled ---
+    const recipients = await getMeetingRecipients(meeting);
+    const finalRecipients = recipients.filter(id => id !== req.user._id.toString());
 
-    // Authorization
-    if (
-      req.user.role !== 'Admin' &&
-      req.user.role !== 'Head' &&
-      meeting.organizer.toString() !== req.user._id.toString()
-    ) {
-      return res.status(403).json({ msg: "Not authorized to delete this meeting" });
-    }
+    await sendNotificationToUsers(
+      finalRecipients,
+      '❌ Meeting Cancelled',
+      `"${meeting.title}" has been cancelled.`,
+      { 
+        type: 'MEETING_CANCELLED' // No redirection needed usually
+      }
+    );
 
-    // --- Notification Logic (Before Delete) ---
-    const recipientUsers = await getMeetingRecipients(meeting);
-    const finalRecipients = recipientUsers.filter(u => u._id.toString() !== req.user._id.toString());
-
-    if (finalRecipients.length > 0) {
-      await sendFcmNotification(
-        finalRecipients,
-        'Meeting Cancelled ❌',
-        `The meeting "${meeting.title}" has been cancelled.`,
-        { meetingId: meeting._id.toString(), type: 'MEETING_CANCELLED' }
-      );
-    }
-
-    await Meeting.findByIdAndDelete(id);
-
-    res.status(200).json({ msg: "Meeting deleted successfully" });
+    await Meeting.findByIdAndDelete(req.params.id);
+    res.json({ msg: "Deleted" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -285,90 +272,5 @@ exports.getMeetingsForAttendance = async (req, res) => {
     res.status(200).json(meetings);
   } catch (err) {
     res.status(500).json({ error: err.message });
-  }
-};
-
-// ==========================================
-//           HELPER FUNCTIONS
-// ==========================================
-
-// 1. Helper to gather recipients
-const getMeetingRecipients = async (meeting) => {
-  const recipientEmails = new Set();
-  const recipientUsers = [];
-
-  // Global Heads
-  const heads = await User.find({ role: 'Head' });
-  heads.forEach(head => {
-    if (!recipientEmails.has(head.email)) {
-      recipientEmails.add(head.email);
-      recipientUsers.push(head);
-    }
-  });
-
-  // Invited Members
-  if (meeting.invitedMembers && meeting.invitedMembers.length > 0) {
-    let invited = meeting.invitedMembers;
-    if (invited.length > 0 && !invited[0].email) { 
-       invited = await User.find({ '_id': { $in: meeting.invitedMembers } });
-    }
-    invited.forEach(user => {
-      if (user && user.email && !recipientEmails.has(user.email)) {
-        recipientEmails.add(user.email);
-        recipientUsers.push(user);
-      }
-    });
-  }
-
-  // Team Members & Heads
-  if (meeting.team) {
-    let teamData = meeting.team;
-    if (!teamData.members && !teamData.heads) {
-        teamData = await Team.findById(meeting.team).populate('members').populate('heads');
-    }
-    if (teamData) {
-      if (teamData.members) {
-        teamData.members.forEach(user => {
-          if (user && !recipientEmails.has(user.email)) {
-            recipientEmails.add(user.email);
-            recipientUsers.push(user);
-          }
-        });
-      }
-      if (teamData.heads) {
-        teamData.heads.forEach(user => {
-          if (user && !recipientEmails.has(user.email)) {
-            recipientEmails.add(user.email);
-            recipientUsers.push(user);
-          }
-        });
-      }
-    }
-  }
-  return recipientUsers;
-};
-
-// 2. Helper to send FCM
-const sendFcmNotification = async (users, title, body, data) => {
-  try {
-    let allTokens = [];
-    users.forEach(user => {
-      if (user.fcmTokens && Array.isArray(user.fcmTokens)) {
-        allTokens.push(...user.fcmTokens);
-      }
-    });
-    allTokens = [...new Set(allTokens.filter(t => t))];
-    if (allTokens.length === 0) return;
-
-    const message = {
-      notification: { title, body },
-      data: data || {},
-      tokens: allTokens,
-    };
-
-    await admin.messaging().sendEachForMulticast(message);
-    console.log(`🔔 Sent notifications for: ${title}`);
-  } catch (error) {
-    console.error("Error in sendFcmNotification:", error);
   }
 };
