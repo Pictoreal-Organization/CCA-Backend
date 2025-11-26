@@ -79,30 +79,57 @@ exports.updateSubtask = async (req, res) => {
 
     // Update logic
     if (status) subtask.status = status;
-    if (description) subtask.description = description; // Assuming you save the 'comment' or 'update description' somewhere
+    if (description) subtask.description = description;
 
     await task.save();
 
-    console.log(`User Role: ${role}, User Name: ${userName}`)
+    console.log(`User Role: ${role}, User Name: ${userName}`);
 
     // --- 🔔 NOTIFICATION: Subtask Status Changed ---
     
     // 1. If Member Changed Status -> Notify Heads
     if (role === 'Member') {
-      // Find heads of the team this task belongs to
-      const team = await Team.findById(task.team);
-      console.log(`Task Team: ${task.team}, Team Heads: ${team ? team.heads : 'None'}`);
-      if (team && team.heads.length > 0) {
-         await sendNotificationToUsers(
-            team.heads,
-            `🔄 Subtask Update: ${userName}`,
-            `Status changed to ${status}: "${subtask.title}"\nNote: ${description || 'No description'}`,
-            { type: 'SUBTASK_UPDATED', taskId: taskId }
-         );
+      let headsToNotify = [];
+
+      // Check if task.team is null (general task for all teams)
+      if (!task.team) {
+        console.log('Task is general (team is null) - notifying all heads');
+        
+        // Get all teams and extract all heads
+        const allTeams = await Team.find({}).select('heads');
+        allTeams.forEach(team => {
+          if (team.heads && team.heads.length > 0) {
+            headsToNotify.push(...team.heads);
+          }
+        });
+        
+        // Remove duplicates (in case a head is in multiple teams)
+        headsToNotify = [...new Set(headsToNotify.map(id => id.toString()))];
+        
+      } else {
+        console.log(`Task belongs to specific team: ${task.team}`);
+        
+        // Find heads of the specific team
+        const team = await Team.findById(task.team);
+        if (team && team.heads.length > 0) {
+          headsToNotify = team.heads;
+        }
+      }
+
+      // Send notification to the collected heads
+      if (headsToNotify.length > 0) {
+        await sendNotificationToUsers(
+          headsToNotify,
+          `🔄 Subtask Update: ${userName}`,
+          `Status changed to ${status}: "${subtask.title}"\nNote: ${description || 'No description'}`,
+          { type: 'SUBTASK_UPDATED', taskId: taskId }
+        );
+      } else {
+        console.log('No heads found to notify');
       }
     }
 
-    // 2. If Head Changed Status (e.g. Asked for Changes) -> Notify Assigned Member
+    // 2. If Head Changed Status -> Notify Assigned Member
     if (role === 'Head' || role === 'Admin') {
       console.log(`Subtask Assigned To: ${subtask.assignedTo}`);
       await sendNotificationToUsers(
@@ -115,9 +142,62 @@ exports.updateSubtask = async (req, res) => {
 
     res.json({ message: 'Subtask updated', task });
   } catch (err) { 
-    console.error(err); // <--- Ensure you see errors
-    res.status(500).json({ error: err.message }); }
+    console.error(err);
+    res.status(500).json({ error: err.message }); 
+  }
 };
+
+// exports.updateSubtask = async (req, res) => {
+//   try {
+//     const { taskId, subtaskId } = req.params;
+//     const { status, description } = req.body;
+//     const { id: userId, role, name: userName } = req.user;
+
+//     const task = await Task.findOne({ _id: taskId, 'subtasks._id': subtaskId });
+//     const subtask = task.subtasks.id(subtaskId);
+//     const oldStatus = subtask.status;
+
+//     // Update logic
+//     if (status) subtask.status = status;
+//     if (description) subtask.description = description; // Assuming you save the 'comment' or 'update description' somewhere
+
+//     await task.save();
+
+//     console.log(`User Role: ${role}, User Name: ${userName}`)
+
+//     // --- 🔔 NOTIFICATION: Subtask Status Changed ---
+    
+//     // 1. If Member Changed Status -> Notify Heads
+//     if (role === 'Member') {
+//       // Find heads of the team this task belongs to
+//       const team = await Team.findById(task.team);
+//       console.log(`Task Team: ${task.team}, Team Heads: ${team ? team.heads : 'None'}`);
+//       if (team && team.heads.length > 0) {
+//          await sendNotificationToUsers(
+//             team.heads,
+//             `🔄 Subtask Update: ${userName}`,
+//             `Status changed to ${status}: "${subtask.title}"\nNote: ${description || 'No description'}`,
+//             { type: 'SUBTASK_UPDATED', taskId: taskId }
+//          );
+//       }
+//     }
+
+//     // 2. If Head Changed Status (e.g. Asked for Changes) -> Notify Assigned Member
+//     if (role === 'Head' || role === 'Admin') {
+//       console.log(`Subtask Assigned To: ${subtask.assignedTo}`);
+//       await sendNotificationToUsers(
+//         subtask.assignedTo,
+//         `⚠️ Update on your Subtask`,
+//         `Head set status to ${status}: "${subtask.title}"\nNote: ${description || ''}`,
+//         { type: 'SUBTASK_UPDATED', taskId: taskId }
+//       );
+//     }
+
+//     res.json({ message: 'Subtask updated', task });
+//   } catch (err) { 
+//     console.error(err); // <--- Ensure you see errors
+//     res.status(500).json({ error: err.message }); }
+// };
 
 exports.getAllTasks = async (req, res) => {
   try {
@@ -273,6 +353,18 @@ exports.getCompletedTasksByTeam = async (req, res) => {
 };
 
 
+exports.deleteTask = async (req, res) => {
+  try {
+    const task = await Task.findByIdAndDelete(req.params.id);
+    if (!task) return res.status(404).json({ message: 'Task not found' });
+
+    res.json({ msg: 'Task deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+
 // exports.createTask = async (req, res) => {
 //   try {
 //     const { title, description, status, startDate, deadline, team, subtasks } = req.body;
@@ -356,17 +448,6 @@ exports.getCompletedTasksByTeam = async (req, res) => {
 //     res.status(400).json({ error: err.message });
 //   }
 // };
-
-exports.deleteTask = async (req, res) => {
-  try {
-    const task = await Task.findByIdAndDelete(req.params.id);
-    if (!task) return res.status(404).json({ message: 'Task not found' });
-
-    res.json({ msg: 'Task deleted successfully' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
 
 // exports.updateTask = async (req, res) => {
 //   try {
