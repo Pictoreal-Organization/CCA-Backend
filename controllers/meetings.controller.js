@@ -149,7 +149,7 @@ exports.getAllMeetings = async (req, res) => {
       .sort({ dateTime: 1 });
 
     const visibleMeetings = meetings.filter(meeting => {
-      if (meeting.organizer._id.toString() === userId) return true;
+      // if (meeting.organizer._id.toString() === userId) return true;
       if (meeting.isPrivate === false) return true;
       if (userRole === "Admin") return true;
       if (userRole === "Head") return meeting.organizer._id.toString() === userId;
@@ -219,7 +219,7 @@ exports.getMeetingsByStatus = async (req, res) => {
     const userRole = req.user.role;
 
     const visibleMeetings = meetings.filter(meeting => {
-        if (meeting.organizer._id.toString() === userId) return true;
+        // if (meeting.organizer._id.toString() === userId) return true;
         const hasTeam = meeting.team && meeting.team.length > 0; 
         const isPrivate = meeting.isPrivate;
 
