@@ -12,6 +12,10 @@ const canMarkAttendance = async (user, meeting) => {
 
   //   return team.heads.some(headId => headId.equals(user._id));
   // }
+
+  // Organizer of the meeting can mark attendance
+  if (meeting.organizer && meeting.organizer.equals(user._id)) return true;
+
   if (user.role === 'Head') {
     if (!meeting.team || meeting.team.length === 0) return true;
   
