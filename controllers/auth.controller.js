@@ -262,19 +262,41 @@ exports.changePasswordWithOTP = async (req, res) => {
   }
 };
 
+// exports.saveFcmToken = async (req, res) => {
+//   try {
+//     const { fcmToken } = req.body;
+//     const userId = req.user.id;
+
+//     if (!fcmToken) return res.status(400).json({ error: 'Token is required' });
+
+//     // Add token to array using $addToSet (prevents duplicates)
+//     await User.findByIdAndUpdate(userId, {
+//       $addToSet: { fcmTokens: fcmToken }
+//     });
+
+//     res.status(200).json({ message: 'FCM Token saved' });
+//   } catch (err) {
+//     console.error("Error saving FCM token:", err);
+//     res.status(500).json({ error: 'Failed to save token' });
+//   }
+// };
+
 exports.saveFcmToken = async (req, res) => {
   try {
     const { fcmToken } = req.body;
     const userId = req.user.id;
 
-    if (!fcmToken) return res.status(400).json({ error: 'Token is required' });
+    if (!fcmToken) {
+      return res.status(400).json({ error: 'Token is required' });
+    }
 
-    // Add token to array using $addToSet (prevents duplicates)
+    // Save (overwrite) single token
     await User.findByIdAndUpdate(userId, {
-      $addToSet: { fcmTokens: fcmToken }
+      fcmTokens: fcmToken
     });
 
     res.status(200).json({ message: 'FCM Token saved' });
+
   } catch (err) {
     console.error("Error saving FCM token:", err);
     res.status(500).json({ error: 'Failed to save token' });

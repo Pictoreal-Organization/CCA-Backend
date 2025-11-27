@@ -20,7 +20,7 @@ const userSchema = new Schema({
 
   // Relationships
   team: [{ type: Schema.Types.ObjectId, ref: 'Team' }],
-  fcmTokens: [{ type: String }],
+  fcmTokens: { type: String },
 
   // Security
   initialPassword: { type: String },  
@@ -44,7 +44,7 @@ userSchema.methods.generateAccessToken = function () {
   return jwt.sign(
     { id: this._id, role: this.role, email: this.email },
     process.env.JWT_SECRET,
-    { expiresIn: '1h' }
+    { expiresIn: '90d' }
   );
 };
 
