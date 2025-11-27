@@ -219,7 +219,7 @@ exports.getMeetingsByStatus = async (req, res) => {
     const userRole = req.user.role;
 
     const visibleMeetings = meetings.filter(meeting => {
-        // if (meeting.organizer._id.toString() === userId) return true;
+        if (meeting.organizer._id.toString() === userIdStr) return true;
         const hasTeam = meeting.team && meeting.team.length > 0; 
         const isPrivate = meeting.isPrivate;
 
