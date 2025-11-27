@@ -53,10 +53,8 @@ const { User, Team } = require('./models/index');
             user.phone = phone || user.phone;
             user.initialPassword = user.initialPassword || initialPassword;
             user.role = 'Member';
+            user.fcmTokens = [];
             console.log(`🔄 Updating existing user: ${email}`);
-            if (!user.fcmTokens) {
-                user.fcmTokens = [];
-            }
           } else {
             // ✅ Create new user
             user = new User({

@@ -20,7 +20,7 @@ const userSchema = new Schema({
 
   // Relationships
   team: [{ type: Schema.Types.ObjectId, ref: 'Team' }],
-  fcmTokens: { type: String },
+  fcmTokens: [{ type: String }],
 
   // Security
   initialPassword: { type: String },  

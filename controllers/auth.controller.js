@@ -281,6 +281,7 @@ exports.changePasswordWithOTP = async (req, res) => {
 //   }
 // };
 
+
 exports.saveFcmToken = async (req, res) => {
   try {
     const { fcmToken } = req.body;
@@ -290,13 +291,14 @@ exports.saveFcmToken = async (req, res) => {
       return res.status(400).json({ error: 'Token is required' });
     }
 
-    // Save (overwrite) single token
-    await User.findByIdAndUpdate(userId, {
-      fcmTokens: fcmToken
-    });
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
 
-    res.status(200).json({ message: 'FCM Token saved' });
+    // Replace old tokens with the new one
+    user.fcmTokens = [fcmToken];
+    await user.save();
 
+    res.status(200).json({ message: 'FCM Token updated' });
   } catch (err) {
     console.error("Error saving FCM token:", err);
     res.status(500).json({ error: 'Failed to save token' });
