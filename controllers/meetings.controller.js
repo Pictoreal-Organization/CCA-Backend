@@ -70,7 +70,7 @@ exports.createMeeting = async (req, res) => {
         month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric' 
     });
 
-    await sendNotificationToUsers(
+    await sendFcmNotification(
       finalRecipients,
       '📅 New Meeting Scheduled',
       `${meeting.title}\nOn: ${dateStr}`,
@@ -98,7 +98,7 @@ exports.updateMeeting = async (req, res) => {
         month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric' 
     });
 
-    await sendNotificationToUsers(
+    await sendFcmNotification(
       finalRecipients,
       '✏️ Meeting Updated',
       `Details for "${meeting.title}" have changed.\nNew Info: ${dateStr}`,
@@ -123,7 +123,7 @@ exports.deleteMeeting = async (req, res) => {
     const recipients = await getMeetingRecipients(meeting);
     const finalRecipients = recipients.filter(id => id !== req.user._id.toString());
 
-    await sendNotificationToUsers(
+    await sendFcmNotification(
       finalRecipients,
       '❌ Meeting Cancelled',
       `"${meeting.title}" has been cancelled.`,
