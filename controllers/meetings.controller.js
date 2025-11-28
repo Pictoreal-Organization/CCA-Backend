@@ -57,6 +57,126 @@ const getMeetingRecipients = async (meeting) => {
   return Array.from(recipientIds);
 };
 
+// ✅ HELPER FUNCTION - Internal use only (renamed for clarity)
+const fetchQuickSelectMemberIds = async (option, userId) => {
+  try {
+    const currentUser = await User.findById(userId);
+    
+    // Check if user is BE Core head
+    const beTeam = await Team.findOne({ name: /BE Core/i });
+    // const isBEHead = currentUser.role === 'Head' && 
+    //                  beTeam && 
+    //                  beTeam.heads.some(h => h.toString() === userId.toString());
+    const isBEHead = 
+      currentUser.role?.toLowerCase() === 'head' &&
+      beTeam &&
+      beTeam.heads.some(h => h.equals(userId));
+
+
+    let memberIds = [];
+
+    switch(option) {
+      case 'core':
+        // Get all heads
+        const allHeads = await User.find({ role: 'Head' });
+        memberIds = allHeads.map(h => h._id.toString());
+        break;
+
+      case 'be-core':
+        // Only if user is BE head - get BE Core team members (not heads)
+        if (isBEHead && beTeam) {
+          memberIds = beTeam.members.map(m => m.toString());
+        }
+        break;
+
+      case 'te-core':
+        // Only if user is NOT BE head - get all heads except BE Core heads
+        if (!isBEHead) {
+          const allHeads = await User.find({ role: 'Head' });
+          const beHeadIds = beTeam ? beTeam.heads.map(h => h.toString()) : [];
+          memberIds = allHeads
+            .map(h => h._id.toString())
+            .filter(id => !beHeadIds.includes(id));
+        }
+        break;
+
+      default:
+        memberIds = [];
+    }
+
+    return memberIds;
+  } catch (error) {
+    console.error('Error in fetchQuickSelectMemberIds:', error);
+    return [];
+  }
+};
+
+// ✅ ENDPOINT 1 - Get available options for current user
+exports.getQuickSelectOptions = async (req, res) => {
+  try {
+    const userId = req.user._id.toString();
+    const currentUser = await User.findById(userId);
+    
+    // Check if user is BE Core head
+    const beTeam = await Team.findOne({ name: /BE Core/i });
+    // const isBEHead = currentUser.role === 'Head' && 
+    //                  beTeam && 
+    //                  beTeam.heads.some(h => h.toString() === userId.toString());
+    const isBEHead = 
+      currentUser.role?.toLowerCase() === 'head' &&
+      beTeam &&
+      beTeam.heads.some(h => h.equals(userId));
+
+    const options = [
+      {
+        id: 'core',
+        label: 'Entire Core',
+        description: 'Add all heads to the meeting',
+        visible: true
+      }
+    ];
+
+    if (isBEHead) {
+      options.push({
+        id: 'be-core',
+        label: 'BE Core',
+        description: 'Add all BE Core team members',
+        visible: true
+      });
+    } else {
+      options.push({
+        id: 'te-core',
+        label: 'TE Core',
+        description: 'Add all heads except BE Core heads',
+        visible: true
+      });
+    }
+
+    res.status(200).json(options);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ✅ ENDPOINT 2 - Get members for a selected option (calls the helper)
+exports.getQuickSelectMembers = async (req, res) => {
+  try {
+    const { option } = req.params;
+    const userId = req.user._id.toString();
+    
+    // Call the HELPER function to get member IDs
+    const memberIds = await fetchQuickSelectMemberIds(option, userId);
+    
+    // Get full user details
+    const members = await User.find({ '_id': { $in: memberIds } })
+      .select('_id name email rollNo role');
+    
+    res.status(200).json(members);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 exports.createMeeting = async (req, res) => {
   try {
     const meeting = new Meeting({ ...req.body, organizer: req.user._id });
@@ -241,7 +361,8 @@ exports.getMeetingsByStatus = async (req, res) => {
         if (isPrivate) {
           if (userRole === 'Admin') return true;
           const isInvited = meeting.invitedMembers?.some(u => u._id.toString() === userIdStr);
-          const isHead = userRole === 'Head'; 
+          // const isHead = userRole === 'Head'; 
+          const isHead = currentUser.role?.toLowerCase() === 'head';
           const isTeamHead = meeting.team?.heads?.some(h => h._id.toString() === userIdStr);
           return isInvited || (isHead && hasTeam && isTeamHead); 
         }
