@@ -338,6 +338,7 @@ exports.getUpcomingMeetings = async (req, res) => {
   try {
     const now = new Date();
     const meetings = await Meeting.find({ dateTime: { $gte: now }, status: 'scheduled' })
+      .populate("organizer")
       .sort({ dateTime: 1 });
     res.status(200).json(meetings);
   } catch (err) {
@@ -352,7 +353,7 @@ exports.getAllMeetingsByStatus = async (req, res) => {
     if (!['scheduled', 'ongoing', 'completed', 'cancelled'].includes(status)) {
       return res.status(400).json({ error: 'Invalid status value' });
     }
-    const meetings = await Meeting.find({ status }).sort({ dateTime: 1 });
+    const meetings = await Meeting.find({ status }).populate("organizer").sort({ dateTime: 1 });
     res.status(200).json(meetings);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch meetings by status' });
