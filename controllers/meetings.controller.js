@@ -322,6 +322,8 @@ exports.getAllMeetingsByStatus = async (req, res) => {
 // --- 7. GET BY STATUS (With Visibility) ---
 exports.getMeetingsByStatus = async (req, res) => {
   try {
+    const userId = req.user._id.toString();
+    const currentUser = await User.findById(userId);
     const { status } = req.params;
     if (!['scheduled', 'ongoing', 'completed', 'cancelled'].includes(status)) {
       return res.status(400).json({ error: 'Invalid status value' });
