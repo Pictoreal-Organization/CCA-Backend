@@ -5,20 +5,29 @@ const canMarkAttendance = async (user, meeting) => {
 
   const userId = user._id.toString();
 
+  if (user.role === "Admin") return true;
+
   if (meeting.organizer && meeting.organizer.toString() === userId) return true;
 
-  if (user.role === "Head") {
-    if (!meeting.team || meeting.team.length === 0) return false;
+  if (user.role !== "Head") return false;
+
+  if (meeting.team && meeting.team.length > 0) {
     const teams = await Team.find({ _id: { $in: meeting.team } });
     const isHeadOfMeetingTeam = teams.some(team =>
       team.heads.some(hid => hid.toString() === userId)
     );
-    return isHeadOfMeetingTeam;
+    if (isHeadOfMeetingTeam) return true;
   }
 
-  return false;
-};
+  const organizer = await User.findById(meeting.organizer).populate("team");
+  if (!organizer || !organizer.team) return false;
+  const organizerTeam = organizer.team;
+  const isHeadOfOrganizerTeam = organizerTeam.heads.some(
+    hid => hid.toString() === userId
+  );
 
+  return isHeadOfOrganizerTeam;
+};
 
 exports.markAttendance = async (req, res) => {
   try {

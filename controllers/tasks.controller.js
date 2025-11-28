@@ -196,6 +196,22 @@ exports.getTasksByTeam = async (req, res) => {
   }
 };
 
+exports.getGeneralTasks = async (req, res) => {
+  try {
+    const tasks = await Task.find({
+      team: null,           // team field is null
+      status: { $ne: "Completed" }  // optional → only active tasks
+    })
+      .populate("subtasks.assignedTo")
+      // .sort({ createdAt: -1 });
+
+    res.status(200).json(tasks);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch general tasks" });
+  }
+};
+
 exports.getTasksByUser = async (req, res) => {
   try {
     const userId = req.params.userId;

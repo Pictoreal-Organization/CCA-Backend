@@ -5,6 +5,7 @@ const { authMiddleware, adminOrHeadOnly } = require('../middlewares/auth.middlew
 
 router.get('/', authMiddleware, tasksController.getAllTasks);
 router.get('/team/:teamId', authMiddleware, tasksController.getTasksByTeam);
+router.get('/general', authMiddleware, tasksController.getGeneralTasks);
 router.get('/user/:userId', authMiddleware, tasksController.getTasksByUser);
 router.get('/user/:userId/completed', authMiddleware, tasksController.getCompletedTasksByUser);
 router.get('/team/:teamId/completed', authMiddleware, adminOrHeadOnly, tasksController.getCompletedTasksByTeam);

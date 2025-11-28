@@ -20,6 +20,13 @@ const canUserControlMeeting = async (user, meeting) => {
     }
   }
 
+  const organizer = await User.findById(meeting.organizer).populate("team");
+  if (!organizer?.team) return false;
+  const organizerTeam = organizer.team;
+  return organizerTeam.heads.some(
+    headId => headId.toString() === user._id.toString()
+  );
+
   return false;
 };
 
