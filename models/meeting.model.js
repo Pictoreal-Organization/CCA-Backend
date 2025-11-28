@@ -6,6 +6,7 @@ const meetingSchema = new Schema({
   description: { type: String, required: true },
   agenda: { type: String },
   dateTime: { type: Date, required: true },
+  endTime: { type: Date },
   duration: { type: Number, default: 60 },
   priority: {
     type: String,
