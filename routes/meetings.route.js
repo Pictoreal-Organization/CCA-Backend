@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const meetingsController = require('../controllers/meetings.controller');
-const { authMiddleware, adminOrHeadOnly, adminOnly } = require('../middlewares/auth.middleware'); 
+const { authMiddleware, adminOrHeadOnly, adminOnly } = require('../middlewares/auth.middleware');
 
+router.get('/:id/has-control', authMiddleware, meetingsController.getHasControl);
 router.get('/quick-select/options', authMiddleware, adminOrHeadOnly, meetingsController.getQuickSelectOptions);
 router.get('/quick-select/:option/members', authMiddleware, adminOrHeadOnly, meetingsController.getQuickSelectMembers);
 

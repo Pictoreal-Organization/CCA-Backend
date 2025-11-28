@@ -3,31 +3,22 @@ const { Attendance, Meeting, Team, User } = require('../models/index');
 const canMarkAttendance = async (user, meeting) => {
   if (!user) return false;
 
-  if (user.role === 'Admin') return true;
+  const userId = user._id.toString();
 
-  // if (user.role === 'Head') {
-  //   if (!meeting.team) return true;
-  //   const team = await Team.findById(meeting.team);
-  //   if (!team) return false;
+  if (meeting.organizer && meeting.organizer.toString() === userId) return true;
 
-  //   return team.heads.some(headId => headId.equals(user._id));
-  // }
-
-  // Organizer of the meeting can mark attendance
-  if (meeting.organizer && meeting.organizer.equals(user._id)) return true;
-
-  if (user.role === 'Head') {
-    if (!meeting.team || meeting.team.length === 0) return true;
-  
+  if (user.role === "Head") {
+    if (!meeting.team || meeting.team.length === 0) return false;
     const teams = await Team.find({ _id: { $in: meeting.team } });
-    if (!teams || teams.length === 0) return false;
-  
-    // Head should belong to at least one team in the meeting
-    return teams.some(team => team.heads.some(headId => headId.equals(user._id)));
-  }  
+    const isHeadOfMeetingTeam = teams.some(team =>
+      team.heads.some(hid => hid.toString() === userId)
+    );
+    return isHeadOfMeetingTeam;
+  }
 
-  return true;
+  return false;
 };
+
 
 exports.markAttendance = async (req, res) => {
   try {

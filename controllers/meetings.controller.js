@@ -1,6 +1,28 @@
 const { Meeting, User, Team } = require('../models/index');
 const admin = require('../config/firebase'); 
 
+// -------- CONTROL CHECK HELPER ----------
+const canUserControlMeeting = async (user, meeting) => {
+  if (!user || !meeting) return false;
+
+  const userId = user._id.toString();
+
+  if (user.role === "Admin") return true;
+
+  if (meeting.organizer?.toString() === userId) return true;
+
+  if (meeting.team && meeting.team.length > 0) {
+    const teams = await Team.find({ _id: { $in: meeting.team } });
+    for (const t of teams) {
+      if (t.heads.some(h => h.toString() === userId)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};
+
 // Helper to send notifications
 const sendFcmNotification = async (users, title, body, data) => {
   try {
@@ -110,6 +132,24 @@ const fetchQuickSelectMemberIds = async (option, userId) => {
     return [];
   }
 };
+
+
+exports.getHasControl = async (req, res) => {
+  try {
+    const meeting = await Meeting.findById(req.params.id);
+    if (!meeting) {
+      return res.status(404).json({ error: "Meeting not found" });
+    }
+
+    const canControl = await canUserControlMeeting(req.user, meeting);
+    console.log("CanControl ", canControl);
+    return res.status(200).json({ canControl });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to check control access' });
+  }
+};
+
+
 
 // ✅ ENDPOINT 1 - Get available options for current user
 exports.getQuickSelectOptions = async (req, res) => {
