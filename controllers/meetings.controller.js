@@ -437,7 +437,7 @@ exports.getMeetingsForAttendance = async (req, res) => {
     const meetings = await Meeting.find({
       status: 'completed',
       dateTime: { $gte: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000) }
-    });
+    }).populate("organizer").sort({ dateTime: 1 });
     res.status(200).json(meetings);
   } catch (err) {
     res.status(500).json({ error: err.message });
