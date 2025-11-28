@@ -2,30 +2,33 @@ const { Meeting, User, Team } = require('../models/index');
 const admin = require('../config/firebase'); 
 
 // Helper to send notifications
-const sendNotificationToUsers = async (userIds, title, body, data) => {
+const sendFcmNotification = async (users, title, body, data) => {
   try {
-    // 1. Fetch users with their tokens
-    const users = await User.find({ '_id': { $in: userIds } }).select('fcmTokens');
-    
-    // 2. Flatten all tokens into one array
-    let tokens = [];
-    users.forEach(u => {
-      if (u.fcmTokens && u.fcmTokens.length > 0) {
-        tokens.push(...u.fcmTokens);
+    let allTokens = [];
+    users.forEach(user => {
+      if (user.fcmTokens && Array.isArray(user.fcmTokens)) {
+        allTokens.push(...user.fcmTokens);
       }
     });
+    
+    // Remove duplicates and nulls
+    allTokens = [...new Set(allTokens.filter(t => t))];
+    
+    if (allTokens.length === 0) return;
 
-    // 3. Send Multicast if tokens exist
-    if (tokens.length > 0) {
-      await admin.messaging().sendEachForMulticast({
-        tokens: tokens,
-        notification: { title, body },
-        data: data || {} // Data payload for redirection
-      });
-      console.log(`🔔 Notification sent: ${title}`);
-    }
-  } catch (err) {
-    console.error("❌ Notification Error:", err);
+    const message = {
+      data: {
+        ...data,
+        title: title,
+        body: body
+      },
+      tokens: allTokens,
+    };
+
+    await admin.messaging().sendEachForMulticast(message);
+    console.log(`🔔 Sent Data Notification for: ${title}`);
+  } catch (error) {
+    console.error("Error in sendFcmNotification:", error);
   }
 };
 
