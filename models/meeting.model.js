@@ -5,9 +5,14 @@ const meetingSchema = new Schema({
   title: { type: String, required: true },
   description: { type: String, required: true },
   agenda: { type: String },
-  dateTime: { type: Date, required: true },
-  endTime: { type: Date },
-  duration: { type: Number, default: 60 },
+  
+  // ✅ Both are required now
+  dateTime: { type: Date, required: true }, 
+  endTime: { type: Date, required: true },
+  
+  // ✅ Calculated automatically
+  duration: { type: Number, default: 0 }, 
+
   priority: {
     type: String,
     enum: ['Low', 'Medium', 'High', 'Urgent'],
@@ -16,23 +21,37 @@ const meetingSchema = new Schema({
   location: { type: String, required: function() { return !this.onlineLink; }, default: null },
   onlineLink: { type: String, default: null, required: function() { return !this.location; } },
   organizer: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  team: [{ type: Schema.Types.ObjectId, ref: 'Team', default: null }], // optional
+  team: [{ type: Schema.Types.ObjectId, ref: 'Team', default: null }],
   status: {
     type: String,
     enum: ['scheduled', 'ongoing', 'completed', 'cancelled'],
     default: 'scheduled'
   },
-  tags: {
-    type: [String], // multiple tags possible
-    // enum: ['General', 'Impactathon', 'PictoFest', 'BDD'], // define your enums here
-    default: []
-  },
-  isPrivate: { type: Boolean, default: false }, // private or public meeting
-  invitedMembers: [
-    { type: Schema.Types.ObjectId, ref: 'User' } // array of user IDs
-  ],
+  tags: { type: [String], default: [] },
+  isPrivate: { type: Boolean, default: false },
+  invitedMembers: [{ type: Schema.Types.ObjectId, ref: 'User' }],
   createdAt: { type: Date, default: Date.now }
 });
 
-module.exports = mongoose.model('Meeting', meetingSchema);
+// ✅ Pre-save hook to calculate duration automatically
+meetingSchema.pre('save', function(next) {
+  if (this.dateTime && this.endTime) {
+    const diffMs = this.endTime - this.dateTime; // Difference in milliseconds
+    this.duration = Math.floor(diffMs / 60000); // Convert to minutes
+  }
+  next();
+});
 
+// ✅ Pre-update hook (for findByIdAndUpdate)
+meetingSchema.pre('findOneAndUpdate', function(next) {
+  const update = this.getUpdate();
+  if (update.dateTime && update.endTime) {
+    const start = new Date(update.dateTime);
+    const end = new Date(update.endTime);
+    const diffMs = end - start;
+    update.duration = Math.floor(diffMs / 60000);
+  }
+  next();
+});
+
+module.exports = mongoose.model('Meeting', meetingSchema);
