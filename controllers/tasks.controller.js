@@ -285,11 +285,11 @@ exports.getCompletedTasksByUser = async (req, res) => {
     }
 
     const tasks = await Task.find({
-      // Rule 1: The main task status must be 'Completed'
       status: 'Completed',
-      // Rule 2: The user must be assigned to at least one subtask in this task
       'subtasks.assignedTo': userId,
-    }).sort({ deadline: -1 }); // Sort by most recently completed
+    }).sort({ deadline: -1 })
+      .populate('team')
+      .populate('subtasks.assignedTo'); 
 
     if (!tasks) {
       return res.status(200).json([]); // Return empty array if no tasks found
@@ -350,3 +350,52 @@ exports.getTaskById = async (req, res) => {
   }
 };
 
+exports.completeTask = async (req, res) => {
+  try {
+    const { id: userId, role, name: userName } = req.user;
+    const taskId = req.params.id;
+
+    const task = await Task.findById(taskId);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    // Verify all subtasks are completed
+    const allSubtasksCompleted = task.subtasks.length > 0 && 
+      task.subtasks.every(s => s.status === 'Completed');
+
+    if (!allSubtasksCompleted) {
+      return res.status(400).json({ 
+        error: 'Cannot complete task: Not all subtasks are completed' 
+      });
+    }
+
+    // Update task status and completedAt timestamp
+    task.status = 'Completed';
+    task.completedAt = new Date();
+    await task.save();
+
+    // --- 🔔 NOTIFICATION: Task Completed ---
+    // Notify all members assigned to subtasks
+    const assignedIds = task.subtasks.flatMap(s => s.assignedTo.map(id => id.toString()));
+    const uniqueIds = [...new Set(assignedIds)];
+
+    await sendNotificationToUsers(
+      uniqueIds,
+      '✅ Task Completed',
+      `Task "${task.title}" has been marked as completed by ${userName}`,
+      { 
+        type: 'TASK_COMPLETED', 
+        taskId: task._id.toString() 
+      }
+    );
+
+    res.status(200).json({ 
+      message: 'Task completed successfully', 
+      task 
+    });
+  } catch (err) { 
+    console.error(err);
+    res.status(500).json({ error: err.message }); 
+  }
+};

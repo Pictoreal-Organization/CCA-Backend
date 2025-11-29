@@ -11,6 +11,7 @@ router.get('/user/:userId/completed', authMiddleware, tasksController.getComplet
 router.get('/team/:teamId/completed', authMiddleware, adminOrHeadOnly, tasksController.getCompletedTasksByTeam);
 router.get('/status/:status', authMiddleware, tasksController.getTasksByStatus);
 router.get('/tasks/:id', authMiddleware,tasksController.getTaskById);
+router.put('/complete/:id', authMiddleware, adminOrHeadOnly, tasksController.completeTask);
 
 // KEEP THIS LAST
 router.get('/:id', authMiddleware, tasksController.getTaskById);
