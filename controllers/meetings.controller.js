@@ -394,7 +394,17 @@ exports.getUpcomingMeetings = async (req, res) => {
     const meetings = await Meeting.find({ dateTime: { $gte: now }, status: 'scheduled' })
       .populate("organizer")
       .sort({ dateTime: 1 });
-    res.status(200).json(meetings);
+    const result = await Promise.all(meetings.map(async (meeting) => {
+      const canControl = await canUserControlMeeting(req.user, meeting);
+      
+      // Return the meeting data + the permission flag
+      return {
+        ...meeting.toObject(), // Converts Mongoose doc to standard JSON object
+        canControl: canControl 
+      };
+    }));
+
+    res.status(200).json(result);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch upcoming meetings' });
   }
@@ -408,22 +418,35 @@ exports.getAllMeetingsByStatus = async (req, res) => {
       return res.status(400).json({ error: 'Invalid status value' });
     }
     const meetings = await Meeting.find({ status }).populate("organizer").sort({ dateTime: 1 });
-    res.status(200).json(meetings);
+    const result = await Promise.all(meetings.map(async (meeting) => {
+      const canControl = await canUserControlMeeting(req.user, meeting);
+      
+      // Return the meeting data + the permission flag
+      return {
+        ...meeting.toObject(), // Converts Mongoose doc to standard JSON object
+        canControl: canControl 
+      };
+    }));
+
+    res.status(200).json(result);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch meetings by status' });
   }
 };
 
-// --- 7. GET BY STATUS (With Visibility) ---
+// --- 7. GET BY STATUS (Optimized with canControl) ---
 exports.getMeetingsByStatus = async (req, res) => {
   try {
     const userId = req.user._id.toString();
     const currentUser = await User.findById(userId);
     const { status } = req.params;
+
+    // 1. Validation
     if (!['scheduled', 'ongoing', 'completed', 'cancelled'].includes(status)) {
       return res.status(400).json({ error: 'Invalid status value' });
     }
 
+    // 2. Fetch Data
     const meetings = await Meeting.find({ status })
       .populate({
         path: 'team',
@@ -438,35 +461,59 @@ exports.getMeetingsByStatus = async (req, res) => {
     const userIdStr = req.user._id.toString();
     const userRole = req.user.role;
 
+    // 3. Filter Visibility (Who can SEE it?) - Keeping your exact logic
     const visibleMeetings = meetings.filter(meeting => {
         if (meeting.organizer._id.toString() === userIdStr) return true;
+        
         const hasTeam = meeting.team && meeting.team.length > 0; 
         const isPrivate = meeting.isPrivate;
 
+        // Public & No Team -> Everyone sees
         if (!isPrivate && !meeting.team) return true;
 
+        // Public & No Team -> Admin/Head sees (Redundant but keeping your logic safe)
         if (!meeting.team && (userRole === 'Admin' || userRole === 'Head')) return true;
 
+        // Public & Has Team
         if (!isPrivate && meeting.team) {
           if (userRole === 'Admin' || userRole === 'Head') return true;
+          // Members only see if they belong to the team
           if (meeting.team.members) {
              return meeting.team.members.some(m => m._id.toString() === userIdStr);
           }
           return false; 
         }
 
+        // Private Meetings
         if (isPrivate) {
           if (userRole === 'Admin') return true;
+          
+          // Invited explicitly?
           const isInvited = meeting.invitedMembers?.some(u => u._id.toString() === userIdStr);
-          // const isHead = userRole === 'Head'; 
+          
+          // Is Team Head?
           const isHead = currentUser.role?.toLowerCase() === 'head';
           const isTeamHead = meeting.team?.heads?.some(h => h._id.toString() === userIdStr);
+          
           return isInvited || (isHead && hasTeam && isTeamHead); 
         }
+        
         return false;
     });
 
-    res.status(200).json(visibleMeetings);
+    // 4. ✅ Calculate Control (Who can EDIT it?)
+    // We map over the 'visibleMeetings' and add the 'canControl' flag
+    const resultsWithControl = await Promise.all(visibleMeetings.map(async (meeting) => {
+        const canControl = await canUserControlMeeting(req.user, meeting);
+        
+        return {
+            ...meeting.toObject(), // Convert Mongoose doc to plain JSON object
+            canControl: canControl // Attach the permission flag
+        };
+    }));
+
+    res.status(200).json(resultsWithControl);
+
   } catch (err) {
     console.error("Error:", err);
     res.status(500).json({ error: 'Failed to fetch meetings' });
@@ -492,7 +539,17 @@ exports.getMeetingsForAttendance = async (req, res) => {
       status: 'completed',
       dateTime: { $gte: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000) }
     }).populate("organizer").sort({ dateTime: 1 });
-    res.status(200).json(meetings);
+    const result = await Promise.all(meetings.map(async (meeting) => {
+      const canControl = await canUserControlMeeting(req.user, meeting);
+      
+      // Return the meeting data + the permission flag
+      return {
+        ...meeting.toObject(), // Converts Mongoose doc to standard JSON object
+        canControl: canControl 
+      };
+    }));
+
+    res.status(200).json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
