@@ -10,6 +10,7 @@ router.get('/user/:userId', authMiddleware, tasksController.getTasksByUser);
 router.get('/user/:userId/completed', authMiddleware, tasksController.getCompletedTasksByUser);
 router.get('/team/:teamId/completed', authMiddleware, adminOrHeadOnly, tasksController.getCompletedTasksByTeam);
 router.get('/status/:status', authMiddleware, tasksController.getTasksByStatus);
+router.get('/tasks/:id', authMiddleware,tasksController.getTaskById);
 
 // KEEP THIS LAST
 router.get('/:id', authMiddleware, tasksController.getTaskById);

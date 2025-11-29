@@ -21,4 +21,7 @@ router.get('/attendance/pending', authMiddleware, adminOrHeadOnly, meetingsContr
 router.put('/:id', authMiddleware, adminOrHeadOnly, meetingsController.updateMeeting); 
 router.delete('/:id', authMiddleware, adminOrHeadOnly, meetingsController.deleteMeeting);
 
+// Route to get full details of a specific meeting
+router.get('/:meetingId', authMiddleware, meetingsController.getMeetingDetails);
+
 module.exports = router;
