@@ -2,31 +2,78 @@ const { Meeting, User, Team } = require('../models/index');
 const admin = require('../config/firebase'); 
 
 // -------- CONTROL CHECK HELPER ----------
+// const canUserControlMeeting = async (user, meeting) => {
+//   if (!user || !meeting) return false;
+
+//   const userId = user._id.toString();
+
+//   if (user.role === "Admin") return true;
+
+//   if (meeting.organizer?.toString() === userId) return true;
+
+//   if (meeting.team && meeting.team.length > 0) {
+//     const teams = await Team.find({ _id: { $in: meeting.team } });
+//     for (const t of teams) {
+//       if (t.heads.some(h => h.toString() === userId)) {
+//         return true;
+//       }
+//     }
+//   }
+
+//   const organizer = await User.findById(meeting.organizer).populate("team");
+//   if (!organizer?.team) return false;
+//   const organizerTeam = organizer.team;
+//   return organizerTeam.heads.some(
+//     headId => headId.toString() === user._id.toString()
+//   );
+
+//   return false;
+// };
+
+// -------- CONTROL CHECK HELPER ----------
 const canUserControlMeeting = async (user, meeting) => {
   if (!user || !meeting) return false;
 
   const userId = user._id.toString();
 
+  // 1. Admin Check
   if (user.role === "Admin") return true;
 
-  if (meeting.organizer?.toString() === userId) return true;
+  // 2. Organizer Check (Self)
+  const organizerId = meeting.organizer?._id 
+      ? meeting.organizer._id.toString() 
+      : meeting.organizer?.toString();
+      
+  if (organizerId === userId) return true;
 
-  if (meeting.team && meeting.team.length > 0) {
-    const teams = await Team.find({ _id: { $in: meeting.team } });
-    for (const t of teams) {
-      if (t.heads.some(h => h.toString() === userId)) {
-        return true;
+  // 3. Head Logic (Strict Team Ownership)
+  if (user.role === "Head") {
+    try {
+      // A. Fetch the Organizer's User Profile to find their teams
+      const organizerUser = await User.findById(organizerId);
+
+      if (organizerUser && organizerUser.team && organizerUser.team.length > 0) {
+        
+        // B. Check if YOU are a Head of ANY team the Organizer belongs to.
+        // Logic: Find a team where:
+        // 1. The ID matches one of the Organizer's teams.
+        // 2. YOUR ID is inside the 'heads' array of that team.
+        const isHeadOfOrganizerTeam = await Team.findOne({
+          _id: { $in: organizerUser.team }, // Teams the organizer is in
+          heads: userId                     // Check if YOU are the head
+        });
+
+        if (isHeadOfOrganizerTeam) {
+          // console.log(`✅ Access Granted: You are a Head of the Organizer's Team.`);
+          return true;
+        }
       }
+    } catch (error) {
+      console.error("Error in Team Head check:", error);
     }
   }
 
-  const organizer = await User.findById(meeting.organizer).populate("team");
-  if (!organizer?.team) return false;
-  const organizerTeam = organizer.team;
-  return organizerTeam.heads.some(
-    headId => headId.toString() === user._id.toString()
-  );
-
+  // Access Denied
   return false;
 };
 
