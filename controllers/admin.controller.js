@@ -60,7 +60,7 @@ exports.adminCreateMember = async (req, res) => {
     const {
       username,
       email,
-      name,
+      fullName,
       rollNo,
       year,
       division,
@@ -78,7 +78,7 @@ exports.adminCreateMember = async (req, res) => {
     const user = new User({
       username,
       email,
-      name,
+      name:fullName,
       rollNo,
       year,
       division,
