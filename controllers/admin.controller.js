@@ -57,7 +57,16 @@ exports.adminCreateTeam = async (req, res) => {
 
 exports.adminCreateMember = async (req, res) => {
   try {
-    const { username, email, teamIds } = req.body;
+    const {
+      username,
+      email,
+      name,
+      rollNo,
+      year,
+      division,
+      phone,
+      teamIds
+    } = req.body;
 
     if (!username || !email || !Array.isArray(teamIds) || teamIds.length === 0)
       return res.status(400).json({ msg: "Username, email, and teamIds are required" });
@@ -69,6 +78,11 @@ exports.adminCreateMember = async (req, res) => {
     const user = new User({
       username,
       email,
+      name,
+      rollNo,
+      year,
+      division,
+      phone,
       role: 'Member',
       password: username,
       initialPassword: username,
@@ -89,9 +103,15 @@ exports.adminCreateMember = async (req, res) => {
       userId: user._id,
       username: user.username,
       email: user.email,
+      name: user.name,
+      rollNo: user.rollNo,
+      year: user.year,
+      division: user.division,
+      phone: user.phone,
       teams: teamIds,
       password: username
     });
+
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -146,7 +166,7 @@ exports.deleteUser = async (req, res) => {
     const deletedUser = await User.findOneAndDelete({ _id: userId });
     if (!deletedUser) return res.status(404).json({ msg: "User not found" });
 
-    res.json({ msg: `${deletedUser.role} deleted successfully and removed from teams.` });
+    res.json({ msg: `${deletedUser.role} deleted successfully and removed from teams. `});
   } catch (err) {
     console.error("Error deleting user:", err);
     res.status(500).json({ error: err.message });
@@ -235,7 +255,7 @@ exports.getAllTasks = async (req, res) => {
 
 exports.getAllUsersForAdmin = async (req, res) => {
   try {
-    const users = await User.find({}, 'username name email role year division initialPassword passwordChanged');
+    const users = await User.find({}, 'username name email role year division initialPassword passwordChanged rollNo');
     const formatted = users.map(u => ({
       _id: u._id,
       username: u.username,
