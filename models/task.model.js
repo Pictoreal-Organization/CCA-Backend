@@ -27,6 +27,7 @@ const taskSchema = new Schema({
   deadline: Date,
   completedAt: { type: Date, default: null },
   team: { type: Schema.Types.ObjectId, ref: 'Team', default: null },
+  organizerTeam: { type: Schema.Types.ObjectId, ref: 'Team', required: true },
   subtasks: [subtaskSchema]
 }, { timestamps: true });
 

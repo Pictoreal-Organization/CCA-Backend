@@ -29,9 +29,65 @@ const sendNotificationToUsers = async (userIds, title, body, data) => {
   }
 };
 
+const hasTaskControl = async (userId, userRole, task) => {
+  try {
+    if (userRole === 'Admin') return true; // Admin always has control
+
+    // Load teams to check heads
+    const organizerTeam = task.organizerTeam 
+      ? await Team.findById(task.organizerTeam).select('heads')
+      : null;
+
+    const taskTeam = task.team
+      ? await Team.findById(task.team).select('heads')
+      : null;
+
+    const organizerHeads = organizerTeam ? organizerTeam.heads.map(id => id.toString()) : [];
+    const taskHeads = taskTeam ? taskTeam.heads.map(id => id.toString()) : [];
+
+    // User is head of task team?
+    if (taskHeads.includes(userId.toString())) return true;
+
+    // User is head of organizer team?
+    if (organizerHeads.includes(userId.toString())) return true;
+
+    return false;
+  } catch (err) {
+    console.error("Control check error:", err);
+    return false;
+  }
+};
+
+exports.checkTaskControl = async (req, res) => {
+  try {
+    const { id: userId, role } = req.user;
+    const { taskId } = req.params;
+
+    const task = await Task.findById(taskId);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const control = await hasTaskControl(userId, role, task);
+
+    return res.status(200).json({ hasControl: control });
+  } catch (err) {
+    console.error("checkTaskControl error:", err);
+    return res.status(500).json({ error: 'Failed to check task control' });
+  }
+};
+
+
+
 exports.createTask = async (req, res) => {
   try {
-    const task = new Task(req.body);
+    const { team: userTeam } = req.user;
+
+    const task = new Task({
+      ...req.body,
+      startDate: new Date(),
+      organizerTeam: userTeam
+    });
     await task.save();
 
     // --- 🔔 NOTIFICATION: Task Created ---
@@ -186,7 +242,7 @@ exports.getTasksByTeam = async (req, res) => {
     const teamId = req.query.teamId || req.params.teamId;
     if (!teamId) return res.status(400).json({ error: 'teamId is required' });
 
-    const tasks = await Task.find({ team: teamId })
+    const tasks = await Task.find({ team: teamId, status: { $ne: "Completed" } })
       .populate('team')
       .populate('subtasks.assignedTo');
 
