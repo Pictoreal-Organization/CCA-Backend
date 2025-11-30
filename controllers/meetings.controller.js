@@ -119,21 +119,57 @@ exports.getHasControl = async (req, res) => {
   }
 };
 
+// exports.createMeeting = async (req, res) => {
+//   try {
+//     const meeting = new Meeting({ ...req.body, organizer: req.user._id });
+//     await meeting.save();
+
+//     // --- 🔔 NOTIFICATION: Meeting Created ---
+//     const recipients = await getMeetingRecipients(meeting);
+//     const finalRecipients = recipients.filter(id => id !== req.user._id.toString()); // Exclude self
+
+//     const dateStr = new Date(meeting.dateTime).toLocaleString('en-US', { 
+//         month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric' 
+//     });
+
+//     await sendFcmNotification(
+//       finalRecipients,
+//       '📅 New Meeting Scheduled',
+//       `${meeting.title}\nOn: ${dateStr}`,
+//       { 
+//         type: 'MEETING_CREATED', 
+//         meetingId: meeting._id.toString() 
+//       }
+//     );
+
+//     res.status(201).json(meeting);
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// };
+
 exports.createMeeting = async (req, res) => {
   try {
     const meeting = new Meeting({ ...req.body, organizer: req.user._id });
     await meeting.save();
 
-    // --- 🔔 NOTIFICATION: Meeting Created ---
-    const recipients = await getMeetingRecipients(meeting);
-    const finalRecipients = recipients.filter(id => id !== req.user._id.toString()); // Exclude self
+    // --- 🔔 NOTIFICATION LOGIC FIXED ---
+    // 1. Get IDs
+    const recipientIds = await getMeetingRecipients(meeting);
+    
+    // 2. Filter out self (Organizer)
+    const targetIds = recipientIds.filter(id => id !== req.user._id.toString());
+
+    // 3. ✅ FETCH USER OBJECTS (This was missing)
+    const recipientUsers = await User.find({ _id: { $in: targetIds } });
 
     const dateStr = new Date(meeting.dateTime).toLocaleString('en-US', { 
         month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric' 
     });
 
+    // 4. Pass User Objects to helper
     await sendFcmNotification(
-      finalRecipients,
+      recipientUsers, // Passed Objects, not IDs
       '📅 New Meeting Scheduled',
       `${meeting.title}\nOn: ${dateStr}`,
       { 
@@ -144,24 +180,57 @@ exports.createMeeting = async (req, res) => {
 
     res.status(201).json(meeting);
   } catch (err) {
+    console.error("Create Meeting Error:", err);
     res.status(500).json({ error: err.message });
   }
 };
+
+
+// exports.updateMeeting = async (req, res) => {
+//   try {
+//     const meeting = await Meeting.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    
+//     // --- 🔔 NOTIFICATION: Meeting Edited ---
+//     const recipients = await getMeetingRecipients(meeting);
+//     const finalRecipients = recipients.filter(id => id !== req.user._id.toString());
+
+//     const dateStr = new Date(meeting.dateTime).toLocaleString('en-US', { 
+//         month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric' 
+//     });
+
+//     await sendFcmNotification(
+//       finalRecipients,
+//       '✏️ Meeting Updated',
+//       `Details for "${meeting.title}" have changed.\nNew Info: ${dateStr}`,
+//       { 
+//         type: 'MEETING_UPDATED', 
+//         meetingId: meeting._id.toString() 
+//       }
+//     );
+
+//     res.json(meeting);
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// };
 
 exports.updateMeeting = async (req, res) => {
   try {
     const meeting = await Meeting.findByIdAndUpdate(req.params.id, req.body, { new: true });
     
-    // --- 🔔 NOTIFICATION: Meeting Edited ---
-    const recipients = await getMeetingRecipients(meeting);
-    const finalRecipients = recipients.filter(id => id !== req.user._id.toString());
+    // --- 🔔 NOTIFICATION LOGIC FIXED ---
+    const recipientIds = await getMeetingRecipients(meeting);
+    const targetIds = recipientIds.filter(id => id !== req.user._id.toString());
+
+    // ✅ FETCH USER OBJECTS
+    const recipientUsers = await User.find({ _id: { $in: targetIds } });
 
     const dateStr = new Date(meeting.dateTime).toLocaleString('en-US', { 
         month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric' 
     });
 
     await sendFcmNotification(
-      finalRecipients,
+      recipientUsers,
       '✏️ Meeting Updated',
       `Details for "${meeting.title}" have changed.\nNew Info: ${dateStr}`,
       { 
@@ -172,31 +241,61 @@ exports.updateMeeting = async (req, res) => {
 
     res.json(meeting);
   } catch (err) {
+    console.error("Update Meeting Error:", err);
     res.status(500).json({ error: err.message });
   }
 };
+
+// exports.deleteMeeting = async (req, res) => {
+//   try {
+//     const meeting = await Meeting.findById(req.params.id);
+//     if (!meeting) return res.status(404).json({ msg: "Not Found" });
+
+//     // --- 🔔 NOTIFICATION: Meeting Cancelled ---
+//     const recipients = await getMeetingRecipients(meeting);
+//     const finalRecipients = recipients.filter(id => id !== req.user._id.toString());
+
+//     await sendFcmNotification(
+//       finalRecipients,
+//       '❌ Meeting Cancelled',
+//       `"${meeting.title}" has been cancelled.`,
+//       { 
+//         type: 'MEETING_CANCELLED' // No redirection needed usually
+//       }
+//     );
+
+//     await Meeting.findByIdAndDelete(req.params.id);
+//     res.json({ msg: "Deleted" });
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// };
 
 exports.deleteMeeting = async (req, res) => {
   try {
     const meeting = await Meeting.findById(req.params.id);
     if (!meeting) return res.status(404).json({ msg: "Not Found" });
 
-    // --- 🔔 NOTIFICATION: Meeting Cancelled ---
-    const recipients = await getMeetingRecipients(meeting);
-    const finalRecipients = recipients.filter(id => id !== req.user._id.toString());
+    // --- 🔔 NOTIFICATION LOGIC FIXED ---
+    const recipientIds = await getMeetingRecipients(meeting);
+    const targetIds = recipientIds.filter(id => id !== req.user._id.toString());
+
+    // ✅ FETCH USER OBJECTS
+    const recipientUsers = await User.find({ _id: { $in: targetIds } });
 
     await sendFcmNotification(
-      finalRecipients,
+      recipientUsers,
       '❌ Meeting Cancelled',
       `"${meeting.title}" has been cancelled.`,
       { 
-        type: 'MEETING_CANCELLED' // No redirection needed usually
+        type: 'MEETING_CANCELLED' 
       }
     );
 
     await Meeting.findByIdAndDelete(req.params.id);
     res.json({ msg: "Deleted" });
   } catch (err) {
+    console.error("Delete Meeting Error:", err);
     res.status(500).json({ error: err.message });
   }
 };
