@@ -113,84 +113,178 @@ const sendFcmNotification = async (users, title, body, data) => {
 // };
 
 // Helper to get all recipients for a meeting
+// const getMeetingRecipients = async (meeting) => {
+//   const recipientIds = new Set();
+//   const hasTeam = meeting.team && meeting.team.length > 0;
+//   const isPrivate = meeting.isPrivate;
+
+//   // Get all heads from all teams
+//   const getAllHeads = async () => {
+//     const teams = await Team.find({}).populate('heads', '_id');
+//     const headIds = new Set();
+//     teams.forEach(team => {
+//       if (team.heads && team.heads.length > 0) {
+//         team.heads.forEach(head => {
+//           headIds.add(head._id.toString());
+//         });
+//       }
+//     });
+//     return Array.from(headIds);
+//   };
+
+//   // Case 1: meeting.team && !meeting.isPrivate
+//   // Recipients: All heads + Only team members
+//   if (hasTeam && !isPrivate) {
+//     console.log("📋 Case 1: Team meeting (Public) - All heads + Team members");
+    
+//     // Add all heads
+//     const allHeadIds = await getAllHeads();
+//     allHeadIds.forEach(id => recipientIds.add(id));
+    
+//     // Add team members only
+//     const teams = await Team.find({ '_id': { $in: meeting.team } });
+//     teams.forEach(team => {
+//       team.members.forEach(m => recipientIds.add(m.toString()));
+//     });
+//   }
+  
+//   // Case 2: meeting.team && meeting.isPrivate
+//   // Recipients: Team heads + Invited members
+//   else if (hasTeam && isPrivate) {
+//     console.log("🔒 Case 2: Team meeting (Private) - Team heads + Invited members");
+    
+//     // Add team heads only
+//     const teams = await Team.find({ '_id': { $in: meeting.team } });
+//     teams.forEach(team => {
+//       team.heads.forEach(h => recipientIds.add(h.toString()));
+//     });
+    
+//     // Add invited members
+//     if (meeting.invitedMembers && meeting.invitedMembers.length > 0) {
+//       meeting.invitedMembers.forEach(m => recipientIds.add(m.toString()));
+//     }
+//   }
+  
+//   // Case 3: !meeting.team && meeting.isPrivate
+//   // Recipients: Invited members + All heads
+//   else if (!hasTeam && isPrivate) {
+//     console.log("🔐 Case 3: No team (Private) - Invited members + All heads");
+    
+//     // Add invited members
+//     if (meeting.invitedMembers && meeting.invitedMembers.length > 0) {
+//       meeting.invitedMembers.forEach(m => recipientIds.add(m.toString()));
+//     }
+    
+//     // Add all heads
+//     const allHeadIds = await getAllHeads();
+//     allHeadIds.forEach(id => recipientIds.add(id));
+//   }
+  
+//   // Case 4: !meeting.team && !meeting.isPrivate
+//   // Recipients: All members + All heads (Everyone)
+//   else if (!hasTeam && !isPrivate) {
+//     console.log("📢 Case 4: General meeting (Public) - All members + All heads");
+    
+//     // Add all users (both members and heads)
+//     const allUsers = await User.find({}, '_id');
+//     allUsers.forEach(u => recipientIds.add(u._id.toString()));
+//   }
+
+//   return Array.from(recipientIds);
+// };
+
+// Helper to get all recipients for a meeting
 const getMeetingRecipients = async (meeting) => {
   const recipientIds = new Set();
   const hasTeam = meeting.team && meeting.team.length > 0;
   const isPrivate = meeting.isPrivate;
 
-  // Get all heads from all teams
+  console.log(`\n🔍 --- START DEBUG: Meeting "${meeting.title}" ---`);
+  console.log(`ℹ️  Params: hasTeam=${hasTeam}, isPrivate=${isPrivate}`);
+
+  // Debug Helper: Get all heads
   const getAllHeads = async () => {
-    const teams = await Team.find({}).populate('heads', '_id');
+    console.log("   🔄 [getAllHeads] Querying all teams...");
+    
+    // We fetch ONLY the heads to check their validity
+    const teams = await Team.find({}).populate('heads', '_id name'); 
     const headIds = new Set();
+
     teams.forEach(team => {
       if (team.heads && team.heads.length > 0) {
-        team.heads.forEach(head => {
-          headIds.add(head._id.toString());
+        team.heads.forEach((head, index) => {
+          // 🚨 CHECK FOR NULL
+          if (head === null) {
+            console.error(`   🚨 [CRITICAL ERROR] Team "${team.name || team._id}" has a NULL head at index ${index}!`);
+            console.error(`      -> This means a User was deleted but their ID is still in this Team.`);
+            console.error(`      -> This NULL value is likely crashing the loop.`);
+          } else {
+            // Valid Head
+            // console.log(`      ✅ Found Head: ${head.name} (${head._id}) in ${team.name}`);
+            headIds.add(head._id.toString());
+          }
         });
       }
     });
+    
+    console.log(`   ✅ [getAllHeads] Successfully collected ${headIds.size} unique head IDs.`);
     return Array.from(headIds);
   };
 
-  // Case 1: meeting.team && !meeting.isPrivate
-  // Recipients: All heads + Only team members
+  // Case 1: Team meeting (Public)
   if (hasTeam && !isPrivate) {
-    console.log("📋 Case 1: Team meeting (Public) - All heads + Team members");
-    
-    // Add all heads
-    const allHeadIds = await getAllHeads();
-    allHeadIds.forEach(id => recipientIds.add(id));
-    
-    // Add team members only
+    console.log("   👉 Case 1 Logic Triggered");
+
+    // 1. Try to get all heads
+    try {
+      const allHeadIds = await getAllHeads();
+      allHeadIds.forEach(id => recipientIds.add(id));
+    } catch (error) {
+      console.error("   ❌ [CRITICAL] getAllHeads() CRASHED:", error);
+    }
+
+    // 2. Get Team Members
+    console.log(`   🔄 Fetching specific teams: ${meeting.team}`);
     const teams = await Team.find({ '_id': { $in: meeting.team } });
-    teams.forEach(team => {
-      team.members.forEach(m => recipientIds.add(m.toString()));
+    
+    teams.forEach(t => {
+      console.log(`      -> Team Found: "${t.name}"`);
+      console.log(`      -> Member Count: ${t.members.length}`);
+      
+      t.members.forEach(m => recipientIds.add(m.toString()));
     });
   }
   
-  // Case 2: meeting.team && meeting.isPrivate
-  // Recipients: Team heads + Invited members
+  // Case 2: Team meeting (Private)
   else if (hasTeam && isPrivate) {
-    console.log("🔒 Case 2: Team meeting (Private) - Team heads + Invited members");
-    
-    // Add team heads only
+    console.log("   👉 Case 2 Logic Triggered");
     const teams = await Team.find({ '_id': { $in: meeting.team } });
-    teams.forEach(team => {
-      team.heads.forEach(h => recipientIds.add(h.toString()));
+    teams.forEach(t => {
+      t.heads.forEach(h => recipientIds.add(h.toString()));
     });
-    
-    // Add invited members
-    if (meeting.invitedMembers && meeting.invitedMembers.length > 0) {
-      meeting.invitedMembers.forEach(m => recipientIds.add(m.toString()));
-    }
+    if (meeting.invitedMembers) meeting.invitedMembers.forEach(m => recipientIds.add(m.toString()));
   }
   
-  // Case 3: !meeting.team && meeting.isPrivate
-  // Recipients: Invited members + All heads
+  // Case 3: No team (Private)
   else if (!hasTeam && isPrivate) {
-    console.log("🔐 Case 3: No team (Private) - Invited members + All heads");
-    
-    // Add invited members
-    if (meeting.invitedMembers && meeting.invitedMembers.length > 0) {
-      meeting.invitedMembers.forEach(m => recipientIds.add(m.toString()));
-    }
-    
-    // Add all heads
+    console.log("   👉 Case 3 Logic Triggered");
+    if (meeting.invitedMembers) meeting.invitedMembers.forEach(m => recipientIds.add(m.toString()));
     const allHeadIds = await getAllHeads();
     allHeadIds.forEach(id => recipientIds.add(id));
   }
   
-  // Case 4: !meeting.team && !meeting.isPrivate
-  // Recipients: All members + All heads (Everyone)
+  // Case 4: General meeting (Public)
   else if (!hasTeam && !isPrivate) {
-    console.log("📢 Case 4: General meeting (Public) - All members + All heads");
-    
-    // Add all users (both members and heads)
+    console.log("   👉 Case 4 Logic Triggered");
     const allUsers = await User.find({}, '_id');
     allUsers.forEach(u => recipientIds.add(u._id.toString()));
   }
 
-  return Array.from(recipientIds);
+  const finalRecipients = Array.from(recipientIds);
+  console.log(`🏁 END DEBUG: Total Recipients found: ${finalRecipients.length}`);
+  console.log(`--------------------------------------------------------\n`);
+
+  return finalRecipients;
 };
 
 exports.getHasControl = async (req, res) => {
