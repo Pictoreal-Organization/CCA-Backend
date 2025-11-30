@@ -7,5 +7,6 @@ const { authMiddleware } = require('../middlewares/auth.middleware');
 router.put('/update-profile', authMiddleware, userController.updateUserProfile);
 router.get('/all', authMiddleware, userController.getAllUsers);
 router.get('/me', authMiddleware, userController.getLoggedInUser);
+router.get('/is-becore', authMiddleware, userController.isBeCore);
 
 module.exports = router;

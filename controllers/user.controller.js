@@ -58,4 +58,29 @@ exports.getLoggedInUser = async (req, res) => {
   }
 };
 
+exports.isBeCore = async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user) return res.status(404).json({ result: false, msg: "User not found" });
+
+    // First check: Must be a Head
+    if (user.role !== "Head") {
+      return res.json({ result: false });
+    }
+
+    // Fetch latest user + populate teams
+    const freshUser = await User.findById(user._id)
+      .populate('team', 'name');
+
+    if (!freshUser) return res.status(404).json({ result: false, msg: "User not found" });
+
+    // Check if ANY team name is "beCore"
+    const isBeCore = freshUser.team.some(t => t.name === "BE Core");
+
+    return res.json({ result: isBeCore }); 
+  } catch (err) {
+    return res.status(500).json({ result: false, error: err.message });
+  }
+};
+
 

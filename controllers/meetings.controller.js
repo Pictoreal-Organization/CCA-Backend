@@ -2,35 +2,6 @@ const { Meeting, User, Team, Attendance } = require('../models/index');
 const admin = require('../config/firebase'); 
 
 // -------- CONTROL CHECK HELPER ----------
-// const canUserControlMeeting = async (user, meeting) => {
-//   if (!user || !meeting) return false;
-
-//   const userId = user._id.toString();
-
-//   if (user.role === "Admin") return true;
-
-//   if (meeting.organizer?.toString() === userId) return true;
-
-//   if (meeting.team && meeting.team.length > 0) {
-//     const teams = await Team.find({ _id: { $in: meeting.team } });
-//     for (const t of teams) {
-//       if (t.heads.some(h => h.toString() === userId)) {
-//         return true;
-//       }
-//     }
-//   }
-
-//   const organizer = await User.findById(meeting.organizer).populate("team");
-//   if (!organizer?.team) return false;
-//   const organizerTeam = organizer.team;
-//   return organizerTeam.heads.some(
-//     headId => headId.toString() === user._id.toString()
-//   );
-
-//   return false;
-// };
-
-// -------- CONTROL CHECK HELPER ----------
 const canUserControlMeeting = async (user, meeting) => {
   if (!user || !meeting) return false;
 
@@ -133,61 +104,6 @@ const getMeetingRecipients = async (meeting) => {
   return Array.from(recipientIds);
 };
 
-// ✅ HELPER FUNCTION - Internal use only (renamed for clarity)
-const fetchQuickSelectMemberIds = async (option, userId) => {
-  try {
-    const currentUser = await User.findById(userId);
-    
-    // Check if user is BE Core head
-    const beTeam = await Team.findOne({ name: /BE Core/i });
-    // const isBEHead = currentUser.role === 'Head' && 
-    //                  beTeam && 
-    //                  beTeam.heads.some(h => h.toString() === userId.toString());
-    const isBEHead = 
-      currentUser.role?.toLowerCase() === 'head' &&
-      beTeam &&
-      beTeam.heads.some(h => h.equals(userId));
-
-
-    let memberIds = [];
-
-    switch(option) {
-      case 'core':
-        // Get all heads
-        const allHeads = await User.find({ role: 'Head' });
-        memberIds = allHeads.map(h => h._id.toString());
-        break;
-
-      case 'be-core':
-        // Only if user is BE head - get BE Core team members (not heads)
-        if (isBEHead && beTeam) {
-          memberIds = beTeam.members.map(m => m.toString());
-        }
-        break;
-
-      case 'te-core':
-        // Only if user is NOT BE head - get all heads except BE Core heads
-        if (!isBEHead) {
-          const allHeads = await User.find({ role: 'Head' });
-          const beHeadIds = beTeam ? beTeam.heads.map(h => h.toString()) : [];
-          memberIds = allHeads
-            .map(h => h._id.toString())
-            .filter(id => !beHeadIds.includes(id));
-        }
-        break;
-
-      default:
-        memberIds = [];
-    }
-
-    return memberIds;
-  } catch (error) {
-    console.error('Error in fetchQuickSelectMemberIds:', error);
-    return [];
-  }
-};
-
-
 exports.getHasControl = async (req, res) => {
   try {
     const meeting = await Meeting.findById(req.params.id);
@@ -200,74 +116,6 @@ exports.getHasControl = async (req, res) => {
     return res.status(200).json({ canControl });
   } catch (err) {
     return res.status(500).json({ error: 'Failed to check control access' });
-  }
-};
-
-
-
-// ✅ ENDPOINT 1 - Get available options for current user
-exports.getQuickSelectOptions = async (req, res) => {
-  try {
-    const userId = req.user._id.toString();
-    const currentUser = await User.findById(userId);
-    
-    // Check if user is BE Core head
-    const beTeam = await Team.findOne({ name: /BE Core/i });
-    // const isBEHead = currentUser.role === 'Head' && 
-    //                  beTeam && 
-    //                  beTeam.heads.some(h => h.toString() === userId.toString());
-    const isBEHead = 
-      currentUser.role?.toLowerCase() === 'head' &&
-      beTeam &&
-      beTeam.heads.some(h => h.equals(userId));
-
-    const options = [
-      {
-        id: 'core',
-        label: 'Entire Core',
-        description: 'Add all heads to the meeting',
-        visible: true
-      }
-    ];
-
-    if (isBEHead) {
-      options.push({
-        id: 'be-core',
-        label: 'BE Core',
-        description: 'Add all BE Core team members',
-        visible: true
-      });
-    } else {
-      options.push({
-        id: 'te-core',
-        label: 'TE Core',
-        description: 'Add all heads except BE Core heads',
-        visible: true
-      });
-    }
-
-    res.status(200).json(options);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-// ✅ ENDPOINT 2 - Get members for a selected option (calls the helper)
-exports.getQuickSelectMembers = async (req, res) => {
-  try {
-    const { option } = req.params;
-    const userId = req.user._id.toString();
-    
-    // Call the HELPER function to get member IDs
-    const memberIds = await fetchQuickSelectMemberIds(option, userId);
-    
-    // Get full user details
-    const members = await User.find({ '_id': { $in: memberIds } })
-      .select('_id name email rollNo role');
-    
-    res.status(200).json(members);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
   }
 };
 
@@ -589,4 +437,84 @@ exports.getMeetingDetails = async (req, res) => {
         console.error("Error fetching meeting details:", err);
         res.status(500).json({ error: "Failed to fetch meeting details." });
     }
+};
+
+// ✅ NEW CONTROLLER 1: Get All Heads (Entire Core)
+exports.getEntireCore = async (req, res) => {
+  try {
+    // Get all teams and populate their heads
+    const teams = await Team.find({}).populate('heads', '_id name email rollNo');
+    
+    // Extract all head IDs (use Set to avoid duplicates)
+    const headIdsSet = new Set();
+    teams.forEach(team => {
+      if (team.heads && team.heads.length > 0) {
+        team.heads.forEach(head => {
+          headIdsSet.add(head._id.toString());
+        });
+      }
+    });
+    
+    // Get full user details for all heads
+    const headIds = Array.from(headIdsSet);
+    const allHeads = await User.find({ '_id': { $in: headIds } })
+      .select('_id name email rollNo role year division');
+    
+    res.status(200).json(allHeads);
+  } catch (err) {
+    console.error('Error in getEntireCore:', err);
+    res.status(500).json({ error: 'Failed to fetch core members' });
+  }
+};
+
+// ✅ NEW CONTROLLER 2: Get BE Core Heads Only
+exports.getBECore = async (req, res) => {
+  try {
+    // Find the BE Core team (case-insensitive)
+    const beTeam = await Team.findOne({ name: /^BE Core$/i })
+      .populate('heads', '_id name email rollNo');
+    
+    if (!beTeam) {
+      return res.status(404).json({ error: 'BE Core team not found' });
+    }
+    
+    // Get full details of BE Core heads
+    const beHeadIds = beTeam.heads.map(head => head._id);
+    const beHeads = await User.find({ '_id': { $in: beHeadIds } })
+      .select('_id name email rollNo role year division');
+    
+    res.status(200).json(beHeads);
+  } catch (err) {
+    console.error('Error in getBECore:', err);
+    res.status(500).json({ error: 'Failed to fetch BE Core heads' });
+  }
+};
+
+// ✅ NEW CONTROLLER 3: Get TE Core Heads (All teams except BE Core)
+exports.getTECore = async (req, res) => {
+  try {
+    // Get all teams except BE Core
+    const teams = await Team.find({ name: { $not: /^BE Core$/i } })
+      .populate('heads', '_id name email rollNo');
+    
+    // Extract all head IDs (use Set to avoid duplicates)
+    const headIdsSet = new Set();
+    teams.forEach(team => {
+      if (team.heads && team.heads.length > 0) {
+        team.heads.forEach(head => {
+          headIdsSet.add(head._id.toString());
+        });
+      }
+    });
+    
+    // Get full user details for TE Core heads
+    const headIds = Array.from(headIdsSet);
+    const teHeads = await User.find({ '_id': { $in: headIds } })
+      .select('_id name email rollNo role year division');
+    
+    res.status(200).json(teHeads);
+  } catch (err) {
+    console.error('Error in getTECore:', err);
+    res.status(500).json({ error: 'Failed to fetch TE Core heads' });
+  }
 };

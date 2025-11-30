@@ -3,9 +3,12 @@ const router = express.Router();
 const meetingsController = require('../controllers/meetings.controller');
 const { authMiddleware, adminOrHeadOnly, adminOnly } = require('../middlewares/auth.middleware');
 
+router.get('/core/entire', authMiddleware, adminOrHeadOnly, meetingsController.getEntireCore);
+router.get('/core/be', authMiddleware, adminOrHeadOnly, meetingsController.getBECore);
+router.get('/core/te', authMiddleware, adminOrHeadOnly, meetingsController.getTECore);
+
+// Control check
 router.get('/:id/has-control', authMiddleware, meetingsController.getHasControl);
-router.get('/quick-select/options', authMiddleware, adminOrHeadOnly, meetingsController.getQuickSelectOptions);
-router.get('/quick-select/:option/members', authMiddleware, adminOrHeadOnly, meetingsController.getQuickSelectMembers);
 
 // Create
 router.post('/create', authMiddleware, adminOrHeadOnly, meetingsController.createMeeting);
