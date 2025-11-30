@@ -79,12 +79,15 @@ const sendFcmNotification = async (users, title, body, data) => {
   }
 };
 
+
 // Helper to get all recipients for a meeting
 const getMeetingRecipients = async (meeting) => {
   const recipientIds = new Set();
+  let hasSpecificTargets = false;
 
   // 1. Add Team Members & Heads
   if (meeting.team && meeting.team.length > 0) {
+    hasSpecificTargets = true;
     const teams = await Team.find({ '_id': { $in: meeting.team } });
     teams.forEach(t => {
       t.members.forEach(m => recipientIds.add(m.toString()));
@@ -94,12 +97,17 @@ const getMeetingRecipients = async (meeting) => {
 
   // 2. Add Invited Members
   if (meeting.invitedMembers && meeting.invitedMembers.length > 0) {
+    hasSpecificTargets = true;
     meeting.invitedMembers.forEach(m => recipientIds.add(m.toString()));
   }
 
-  // 3. Add Global Heads (if policy requires, optional)
-  // const heads = await User.find({ role: 'Head' });
-  // heads.forEach(h => recipientIds.add(h._id.toString()));
+  // 3. ✅ HANDLE GENERAL MEETINGS (Broadcast)
+  // If no specific team or invites were set, and it's NOT private, notify EVERYONE.
+  if (!hasSpecificTargets && !meeting.isPrivate) {
+    console.log("📢 General Meeting detected. Fetching ALL users for notification...");
+    const allUsers = await User.find({}, '_id'); // Fetch all user IDs
+    allUsers.forEach(u => recipientIds.add(u._id.toString()));
+  }
 
   return Array.from(recipientIds);
 };
