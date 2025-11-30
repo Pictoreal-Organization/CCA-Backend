@@ -282,19 +282,16 @@ exports.getAllMeetingsByStatus = async (req, res) => {
   }
 };
 
-// --- 7. GET BY STATUS (Optimized with canControl) ---
 exports.getMeetingsByStatus = async (req, res) => {
   try {
     const userId = req.user._id.toString();
     const currentUser = await User.findById(userId);
     const { status } = req.params;
 
-    // 1. Validation
     if (!['scheduled', 'ongoing', 'completed', 'cancelled'].includes(status)) {
       return res.status(400).json({ error: 'Invalid status value' });
     }
 
-    // 2. Fetch Data
     const meetings = await Meeting.find({ status })
       .populate({
         path: 'team',
@@ -309,27 +306,26 @@ exports.getMeetingsByStatus = async (req, res) => {
     const userIdStr = req.user._id.toString();
     const userRole = req.user.role;
 
-    // 3. Filter Visibility (Who can SEE it?) - Keeping your exact logic
     const visibleMeetings = meetings.filter(meeting => {
+        // Creator always sees their meeting
         if (meeting.organizer._id.toString() === userIdStr) return true;
         
         const hasTeam = meeting.team && meeting.team.length > 0; 
         const isPrivate = meeting.isPrivate;
 
         // Public & No Team -> Everyone sees
-        if (!isPrivate && !meeting.team) return true;
-
-        // Public & No Team -> Admin/Head sees (Redundant but keeping your logic safe)
-        if (!meeting.team && (userRole === 'Admin' || userRole === 'Head')) return true;
+        if (!isPrivate && !hasTeam) return true;
 
         // Public & Has Team
-        if (!isPrivate && meeting.team) {
+        if (!isPrivate && hasTeam) {
           if (userRole === 'Admin' || userRole === 'Head') return true;
-          // Members only see if they belong to the team
-          if (meeting.team.members) {
-             return meeting.team.members.some(m => m._id.toString() === userIdStr);
-          }
-          return false; 
+          
+          // ✅ FIX: Check if member belongs to ANY of the meeting's teams
+          const isMemberOfAnyTeam = meeting.team.some(team => 
+            team.members && team.members.some(m => m._id.toString() === userIdStr)
+          );
+          
+          return isMemberOfAnyTeam;
         }
 
         // Private Meetings
@@ -339,24 +335,24 @@ exports.getMeetingsByStatus = async (req, res) => {
           // Invited explicitly?
           const isInvited = meeting.invitedMembers?.some(u => u._id.toString() === userIdStr);
           
-          // Is Team Head?
-          const isHead = currentUser.role?.toLowerCase() === 'head';
-          const isTeamHead = meeting.team?.heads?.some(h => h._id.toString() === userIdStr);
+          // Is Team Head of any of the meeting's teams?
+          const isTeamHead = hasTeam && meeting.team.some(team =>
+            team.heads && team.heads.some(h => h._id.toString() === userIdStr)
+          );
           
-          return isInvited || (isHead && hasTeam && isTeamHead); 
+          return isInvited || isTeamHead; 
         }
         
         return false;
     });
 
-    // 4. ✅ Calculate Control (Who can EDIT it?)
-    // We map over the 'visibleMeetings' and add the 'canControl' flag
+    // 4. Calculate Control
     const resultsWithControl = await Promise.all(visibleMeetings.map(async (meeting) => {
         const canControl = await canUserControlMeeting(req.user, meeting);
         
         return {
-            ...meeting.toObject(), // Convert Mongoose doc to plain JSON object
-            canControl: canControl // Attach the permission flag
+            ...meeting.toObject(),
+            canControl: canControl
         };
     }));
 
