@@ -22,4 +22,11 @@ router.get('/meetings', authMiddleware, adminOnly, adminController.getAllMeeting
 router.get('/tasks', authMiddleware, adminOnly, adminController.getAllTasks);
 router.get('/users', authMiddleware, adminOnly, adminController.getAllUsersForAdmin);
 
+// Get single member
+router.get('/members/:id', authMiddleware, adminOnly, adminController.getSingleMember);
+
+// Update member
+router.put('/members/:id', authMiddleware, adminOnly, adminController.updateMember);
+
+
 module.exports = router;

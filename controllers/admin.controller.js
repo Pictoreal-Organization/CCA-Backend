@@ -273,3 +273,58 @@ exports.getAllUsersForAdmin = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+exports.getSingleMember = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const member = await User.findById(id).populate('team');
+    if (!member) return res.status(404).json({ msg: "Member not found" });
+
+    res.json(member);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.updateMember = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    // Fetch old member info
+    const oldMember = await User.findById(id);
+    if (!oldMember) return res.status(404).json({ msg: "Member not found" });
+
+    const oldTeams = oldMember.team || [];
+    const newTeams = updates.team || [];
+
+    // STEP 1: Update user fields normally
+    const updatedMember = await User.findByIdAndUpdate(
+      id,
+      updates,
+      { new: true }
+    );
+
+    // STEP 2: Remove member from teams that they are no longer part of
+    await Team.updateMany(
+      { _id: { $in: oldTeams } },
+      { $pull: { members: id } }
+    );
+
+    // STEP 3: Add member to new teams
+    await Team.updateMany(
+      { _id: { $in: newTeams } },
+      { $addToSet: { members: id } }
+    );
+
+    res.json({
+      msg: "Member updated successfully",
+      user: updatedMember
+    });
+
+  } catch (err) {
+    console.error("Update Member Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
