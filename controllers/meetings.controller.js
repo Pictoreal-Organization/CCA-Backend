@@ -201,29 +201,28 @@ exports.createMeeting = async (req, res) => {
     const meeting = new Meeting({ ...req.body, organizer: req.user._id });
     await meeting.save();
 
-    // --- 🔔 NOTIFICATION LOGIC FIXED ---
-    // 1. Get IDs
+    // --- 🔔 NOTIFICATION LOGIC ---
     const recipientIds = await getMeetingRecipients(meeting);
-    
-    // 2. Filter out self (Organizer)
     const targetIds = recipientIds.filter(id => id !== req.user._id.toString());
-
-    // 3. ✅ FETCH USER OBJECTS (This was missing)
     const recipientUsers = await User.find({ _id: { $in: targetIds } });
 
-    const dateStr = new Date(meeting.dateTime).toLocaleString('en-IN', { 
-        timeZone: 'Asia/Kolkata',
-        month: 'short', 
-        day: 'numeric', 
-        hour: 'numeric', 
-        minute: 'numeric',
-        hour12: true
+    // 1. Format Date & Time separately for clarity
+    const meetDate = new Date(meeting.dateTime);
+    const dateStr = meetDate.toLocaleDateString('en-IN', { 
+        timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' 
     });
+    const timeStr = meetDate.toLocaleTimeString('en-IN', { 
+        timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true 
+    });
+
+    // 2. Construct Full Body
+    const locationStr = meeting.onlineLink ? "Online" : (meeting.location || "TBD");
+    const bodyText = `📅 ${dateStr} at ${timeStr}\n📍 ${locationStr}\n📝 ${meeting.description.substring(0, 30)}...`;
 
     await sendFcmNotification(
       recipientUsers, 
-      '📅 New Meeting Scheduled',
-      `${meeting.title}\nOn: ${dateStr}`,
+      `New Meeting: ${meeting.title}`, // Clearer Title
+      bodyText,
       { 
         type: 'MEETING_CREATED', 
         meetingId: meeting._id.toString() 
@@ -237,26 +236,34 @@ exports.createMeeting = async (req, res) => {
   }
 };
 
-
 exports.updateMeeting = async (req, res) => {
   try {
     const meeting = await Meeting.findByIdAndUpdate(req.params.id, req.body, { new: true });
     
-    // --- 🔔 NOTIFICATION LOGIC FIXED ---
+    // --- 🔔 NOTIFICATION LOGIC ---
     const recipientIds = await getMeetingRecipients(meeting);
     const targetIds = recipientIds.filter(id => id !== req.user._id.toString());
-
-    // ✅ FETCH USER OBJECTS
     const recipientUsers = await User.find({ _id: { $in: targetIds } });
 
-    const dateStr = new Date(meeting.dateTime).toLocaleString('en-US', { 
-        month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric' 
+    // 1. Format Date & Time
+    const meetDate = new Date(meeting.dateTime);
+    const dateStr = meetDate.toLocaleDateString('en-IN', { 
+        timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' 
     });
+    const timeStr = meetDate.toLocaleTimeString('en-IN', { 
+        timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true 
+    });
+
+    // 2. Construct "Updated Details" Body
+    const locationStr = meeting.onlineLink ? "Online" : (meeting.location || "TBD");
+    
+    // We simply show the CURRENT (Updated) state of the meeting
+    const bodyText = `Update: The meeting is now on:\n📅 ${dateStr} at ${timeStr}\n📍 ${locationStr}`;
 
     await sendFcmNotification(
       recipientUsers,
-      '✏️ Meeting Updated',
-      `Details for "${meeting.title}" have changed.\nNew Info: ${dateStr}`,
+      `📢 Update: ${meeting.title}`,
+      bodyText,
       { 
         type: 'MEETING_UPDATED', 
         meetingId: meeting._id.toString() 
