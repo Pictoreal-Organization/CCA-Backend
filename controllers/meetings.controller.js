@@ -399,42 +399,6 @@ exports.getMeetingsForAttendance = async (req, res) => {
   }
 };
 
-exports.getMeetingDetails = async (req, res) => {
-    try {
-        const { meetingId } = req.params;
-
-        // 1. Fetch the Meeting details and populate invited members/organizer
-        const meeting = await Meeting.findById(meetingId)
-            .select('-__v') // Exclude the version key
-            .populate('organizer', 'name username')
-            .populate('invitedMembers', 'name rollNo year division email phone')
-            .lean(); // Use .lean() for faster query results as we're adding extra data
-
-        if (!meeting) {
-            return res.status(404).json({ msg: "Meeting not found" });
-        }
-
-        // 2. Fetch the Attendance details and populate present/absent members
-        const attendance = await Attendance.findOne({ meeting: meetingId })
-            .select('presentMembers absentMembers') // Select only the arrays we need
-            .populate('presentMembers', 'name rollNo year division email phone')
-            .populate('absentMembers', 'name rollNo year division email phone')
-            .lean();
-        
-        // 3. Combine the data
-        const meetingDetails = {
-            ...meeting,
-            attendance: attendance || { presentMembers: [], absentMembers: [] }, // Attach attendance data (or empty arrays if attendance hasn't been taken yet)
-            totalInvited: meeting.invitedMembers.length
-        };
-
-        res.status(200).json(meetingDetails);
-    } catch (err) {
-        console.error("Error fetching meeting details:", err);
-        res.status(500).json({ error: "Failed to fetch meeting details." });
-    }
-};
-
 // ✅ NEW CONTROLLER 1: Get All Heads (Entire Core)
 exports.getEntireCore = async (req, res) => {
   try {

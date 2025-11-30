@@ -119,7 +119,7 @@ exports.adminCreateMember = async (req, res) => {
 
 exports.adminCreateHead = async (req, res) => {
   try {
-    const { username, email, teamIds } = req.body;
+    const { username, email, name, teamIds } = req.body;
 
     if (!username || !email || !Array.isArray(teamIds) || teamIds.length === 0)
       return res.status(400).json({ msg: "Username, email, and teamIds are required" });
@@ -132,6 +132,7 @@ exports.adminCreateHead = async (req, res) => {
       username,
       email,
       role: 'Head',
+      name: name ? name : "",
       password: username,
       initialPassword: username,
       passwordChanged: false,
