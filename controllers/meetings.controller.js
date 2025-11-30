@@ -81,119 +81,6 @@ const sendFcmNotification = async (users, title, body, data) => {
 
 
 // Helper to get all recipients for a meeting
-// const getMeetingRecipients = async (meeting) => {
-//   const recipientIds = new Set();
-//   let hasSpecificTargets = false;
-
-//   // 1. Add Team Members & Heads
-//   if (meeting.team && meeting.team.length > 0) {
-//     hasSpecificTargets = true;
-//     const teams = await Team.find({ '_id': { $in: meeting.team } });
-//     teams.forEach(t => {
-//       t.members.forEach(m => recipientIds.add(m.toString()));
-//       t.heads.forEach(h => recipientIds.add(h.toString()));
-//     });
-//   }
-
-//   // 2. Add Invited Members
-//   if (meeting.invitedMembers && meeting.invitedMembers.length > 0) {
-//     hasSpecificTargets = true;
-//     meeting.invitedMembers.forEach(m => recipientIds.add(m.toString()));
-//   }
-
-//   // 3. ✅ HANDLE GENERAL MEETINGS (Broadcast)
-//   // If no specific team or invites were set, and it's NOT private, notify EVERYONE.
-//   if (!hasSpecificTargets && !meeting.isPrivate) {
-//     console.log("📢 General Meeting detected. Fetching ALL users for notification...");
-//     const allUsers = await User.find({}, '_id'); // Fetch all user IDs
-//     allUsers.forEach(u => recipientIds.add(u._id.toString()));
-//   }
-
-//   return Array.from(recipientIds);
-// };
-
-// Helper to get all recipients for a meeting
-// const getMeetingRecipients = async (meeting) => {
-//   const recipientIds = new Set();
-//   const hasTeam = meeting.team && meeting.team.length > 0;
-//   const isPrivate = meeting.isPrivate;
-
-//   // Get all heads from all teams
-//   const getAllHeads = async () => {
-//     const teams = await Team.find({}).populate('heads', '_id');
-//     const headIds = new Set();
-//     teams.forEach(team => {
-//       if (team.heads && team.heads.length > 0) {
-//         team.heads.forEach(head => {
-//           headIds.add(head._id.toString());
-//         });
-//       }
-//     });
-//     return Array.from(headIds);
-//   };
-
-//   // Case 1: meeting.team && !meeting.isPrivate
-//   // Recipients: All heads + Only team members
-//   if (hasTeam && !isPrivate) {
-//     console.log("📋 Case 1: Team meeting (Public) - All heads + Team members");
-    
-//     // Add all heads
-//     const allHeadIds = await getAllHeads();
-//     allHeadIds.forEach(id => recipientIds.add(id));
-    
-//     // Add team members only
-//     const teams = await Team.find({ '_id': { $in: meeting.team } });
-//     teams.forEach(team => {
-//       team.members.forEach(m => recipientIds.add(m.toString()));
-//     });
-//   }
-  
-//   // Case 2: meeting.team && meeting.isPrivate
-//   // Recipients: Team heads + Invited members
-//   else if (hasTeam && isPrivate) {
-//     console.log("🔒 Case 2: Team meeting (Private) - Team heads + Invited members");
-    
-//     // Add team heads only
-//     const teams = await Team.find({ '_id': { $in: meeting.team } });
-//     teams.forEach(team => {
-//       team.heads.forEach(h => recipientIds.add(h.toString()));
-//     });
-    
-//     // Add invited members
-//     if (meeting.invitedMembers && meeting.invitedMembers.length > 0) {
-//       meeting.invitedMembers.forEach(m => recipientIds.add(m.toString()));
-//     }
-//   }
-  
-//   // Case 3: !meeting.team && meeting.isPrivate
-//   // Recipients: Invited members + All heads
-//   else if (!hasTeam && isPrivate) {
-//     console.log("🔐 Case 3: No team (Private) - Invited members + All heads");
-    
-//     // Add invited members
-//     if (meeting.invitedMembers && meeting.invitedMembers.length > 0) {
-//       meeting.invitedMembers.forEach(m => recipientIds.add(m.toString()));
-//     }
-    
-//     // Add all heads
-//     const allHeadIds = await getAllHeads();
-//     allHeadIds.forEach(id => recipientIds.add(id));
-//   }
-  
-//   // Case 4: !meeting.team && !meeting.isPrivate
-//   // Recipients: All members + All heads (Everyone)
-//   else if (!hasTeam && !isPrivate) {
-//     console.log("📢 Case 4: General meeting (Public) - All members + All heads");
-    
-//     // Add all users (both members and heads)
-//     const allUsers = await User.find({}, '_id');
-//     allUsers.forEach(u => recipientIds.add(u._id.toString()));
-//   }
-
-//   return Array.from(recipientIds);
-// };
-
-// Helper to get all recipients for a meeting
 const getMeetingRecipients = async (meeting) => {
   const recipientIds = new Set();
   const hasTeam = meeting.team && meeting.team.length > 0;
@@ -324,13 +211,17 @@ exports.createMeeting = async (req, res) => {
     // 3. ✅ FETCH USER OBJECTS (This was missing)
     const recipientUsers = await User.find({ _id: { $in: targetIds } });
 
-    const dateStr = new Date(meeting.dateTime).toLocaleString('en-US', { 
-        month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric' 
+    const dateStr = new Date(meeting.dateTime).toLocaleString('en-IN', { 
+        timeZone: 'Asia/Kolkata',
+        month: 'short', 
+        day: 'numeric', 
+        hour: 'numeric', 
+        minute: 'numeric',
+        hour12: true
     });
 
-    // 4. Pass User Objects to helper
     await sendFcmNotification(
-      recipientUsers, // Passed Objects, not IDs
+      recipientUsers, 
       '📅 New Meeting Scheduled',
       `${meeting.title}\nOn: ${dateStr}`,
       { 
