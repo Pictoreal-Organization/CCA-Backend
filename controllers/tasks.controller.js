@@ -366,12 +366,24 @@ exports.getCompletedTasksByTeam = async (req, res) => {
       return res.status(400).json({ error: 'Team ID is required' });
     }
 
+    // const tasks = await Task.find({
+    //   team: teamId,
+    //   status: 'Completed'
+    // })
+    //   .sort({ completedAt: -1 }) // Latest completed first
+    //   .populate('team')
+    //   .populate('subtasks.assignedTo');
+
     const tasks = await Task.find({
-      team: teamId,
-      status: 'Completed'
+      status: 'Completed',
+      $or: [
+        { team: teamId },            // tasks assigned to that team
+        { organizerTeam: teamId }    // tasks created by that team
+      ]
     })
       .sort({ completedAt: -1 }) // Latest completed first
       .populate('team')
+      .populate('organizerTeam')   // ⬅️ Also populate organizerTeam
       .populate('subtasks.assignedTo');
 
     res.status(200).json(tasks);
