@@ -1,4 +1,4 @@
-const Tag = require('../models/tag.model');
+const { Tag } = require('../models/index');
 
 // Get all active tags
 exports.getAllTags = async (req, res) => {
