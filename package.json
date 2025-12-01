@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "nodemon index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "seed": "node seed.js"
+    "seed": "node seed.js",
+    "swagger": "node swagger-init.js"
   },
   "keywords": [],
   "author": "",
@@ -29,6 +30,9 @@
     "node-cron": "^4.2.1",
     "node-fetch": "^2.7.0",
     "nodemailer": "^7.0.9",
-    "nodemon": "^3.1.10"
+    "nodemon": "^3.1.10",
+    "swagger-autogen": "^2.23.7",
+    "swagger-ui-express": "^5.0.1",
+    "yamljs": "^0.3.0"
   }
 }

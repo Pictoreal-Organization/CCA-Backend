@@ -2,7 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
 const dotenv = require('dotenv');
-
+const swaggerUi = require("swagger-ui-express");
+const swaggerFile = require("./swagger-output.json");
 
 dotenv.config();
 require('./db');
@@ -35,6 +36,10 @@ app.use('/api/admin/', adminRoutes);
 app.use('/api/attendance/', attendanceRoutes);
 app.use('/api/teams/', teamRoutes);
 app.use('/api/tags/', tagRoutes);
+
+// for swagger
+app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerFile));
+
 
 app.get('/', (req, res) => {
   console.log("Works");

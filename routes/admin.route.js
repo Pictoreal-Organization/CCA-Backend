@@ -1,4 +1,3 @@
-// admin.route.js
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/admin.controller');
@@ -8,8 +7,6 @@ router.post('/create-team', authMiddleware, adminOnly, adminController.adminCrea
 router.post('/create-member', authMiddleware, adminOnly, adminController.adminCreateMember);
 router.post('/create-head', authMiddleware, adminOnly, adminController.adminCreateHead);
 
-// router.delete('/member/:memberId', authMiddleware, adminOnly, adminController.deleteMember);
-// router.delete('/head/:headId', authMiddleware, adminOnly, adminController.deleteHead);
 router.delete('/:userId', authMiddleware, adminOnly, adminController.deleteUser);
 
 router.put('/team/:teamId/head', authMiddleware, adminOnly, adminController.updateTeamHead);

@@ -1,58 +1,47 @@
 require('dotenv').config();
 require('./db'); // MongoDB connection
-const { Member, Team, Meeting } = require('./models/schema'); // Import models
+const { spawn } = require('child_process');
+
+function runScript(scriptName) {
+  return new Promise((resolve, reject) => {
+    console.log(`\n🚀 Running ${scriptName}...\n`);
+    
+    const child = spawn('node', [scriptName], {
+      stdio: 'inherit', // Shows output in real-time
+      shell: true
+    });
+
+    child.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(`${scriptName} exited with code ${code}`));
+      } else {
+        console.log(`\n✅ ${scriptName} completed successfully!\n`);
+        resolve();
+      }
+    });
+
+    child.on('error', (err) => {
+      reject(err);
+    });
+  });
+}
 
 async function seed() {
   try {
-    // Step 1: Create a member (initially with empty teams)
-    const member1 = await Member.create({
-      name: 'John Doe',
-      rollNo: '1234',
-      year: 'TE',
-      division: '10',
-      email: 'johnDoe@gmail.com',
-      phone: '1234567890',
-      team: [] // will be updated later
-    });
+    console.log('🌱 Starting database seeding process...\n');
+    console.log('═══════════════════════════════════════════════════\n');
 
-    const member2 = await Member.create({
-      name: 'Sarah Smith',
-      rollNo: '1234',
-      year: 'TE',
-      division: '11',
-      email: 'sarahsmith@gmail.com',
-      phone: '1234567809',
-      team: [] // will be updated later
-    });
+    // Step 1: Import Core Team
+    await runScript('importCoreTeam.js');
 
-    // Step 2: Create a team and add the member to it
-    const team = await Team.create({
-      name: 'Core Dev Team',
-      members: [member1._id, member2._id],
-    });
+    // Step 2: Import Members
+    await runScript('importMembers.js');
 
-    // Step 3: Update member's team array to include this team
-    member1.team.push(team._id);
-    await member1.save();
-    member2.team.push(team._id);
-    await member2.save();
-
-    // Step 4: Create a meeting referencing team and member as organizer
-    const meeting = await Meeting.create({
-      title: 'Welcome Meet',
-      description: 'Kickoff discussion',
-      location: 'Room 101',
-      dateTime: new Date(),
-      organizer: member1._id,
-      team: team._id,
-      agenda: 'Orientation and overview',
-      priority: 'High'
-    });
-
-    console.log('🌱 Seed data inserted successfully');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('\n🎉 All seed data imported successfully!\n');
     process.exit(0);
   } catch (err) {
-    console.error('⚠️ Error inserting seed data:', err.message);
+    console.error('\n❌ Error during seeding process:', err.message);
     process.exit(1);
   }
 }
