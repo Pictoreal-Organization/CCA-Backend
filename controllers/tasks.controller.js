@@ -467,3 +467,43 @@ exports.completeTask = async (req, res) => {
     res.status(500).json({ error: err.message }); 
   }
 };
+
+exports.batchCheckTaskControl = async (req, res) => {
+  try {
+    const { id: userId, role } = req.user;
+    const { taskIds } = req.body;
+
+    if (!taskIds || !Array.isArray(taskIds)) {
+      return res.status(400).json({ error: 'taskIds array is required' });
+    }
+
+    // Fetch all tasks in one query
+    const tasks = await Task.find({ _id: { $in: taskIds } });
+
+    // Check control for all tasks in parallel
+    const controlChecks = await Promise.all(
+      tasks.map(async (task) => {
+        const control = await hasTaskControl(userId, role, task);
+        return { taskId: task._id.toString(), hasControl: control };
+      })
+    );
+
+    // Convert array to object map
+    const controlMap = {};
+    controlChecks.forEach(({ taskId, hasControl }) => {
+      controlMap[taskId] = hasControl;
+    });
+
+    // Add false for any taskIds that weren't found
+    taskIds.forEach(id => {
+      if (!(id in controlMap)) {
+        controlMap[id] = false;
+      }
+    });
+
+    return res.status(200).json({ controlMap });
+  } catch (err) {
+    console.error("batchCheckTaskControl error:", err);
+    return res.status(500).json({ error: 'Failed to check task control' });
+  }
+};

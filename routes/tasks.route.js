@@ -12,6 +12,8 @@ router.get('/team/:teamId/completed', authMiddleware, adminOrHeadOnly, tasksCont
 router.get('/status/:status', authMiddleware, tasksController.getTasksByStatus);
 router.get('/tasks/:id', authMiddleware,tasksController.getTaskById);
 router.get('/:taskId/has-control', authMiddleware, tasksController.checkTaskControl);
+router.post('/batch-check-control', authMiddleware, tasksController.batchCheckTaskControl);
+
 router.put('/complete/:id', authMiddleware, adminOrHeadOnly, tasksController.completeTask);
 
 // KEEP THIS LAST
