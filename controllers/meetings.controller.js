@@ -198,7 +198,15 @@ exports.getHasControl = async (req, res) => {
 
 exports.createMeeting = async (req, res) => {
   try {
-    const meeting = new Meeting({ ...req.body, organizer: req.user._id });
+    const { coreType, ...meetingData } = req.body;
+    
+    const meeting = new Meeting({ 
+      ...meetingData, 
+      organizer: req.user._id,
+      // ✅ Store coreType if it's a core meeting
+      coreType: coreType || null
+    });
+    
     await meeting.save();
 
     // --- 🔔 NOTIFICATION LOGIC ---
@@ -238,7 +246,17 @@ exports.createMeeting = async (req, res) => {
 
 exports.updateMeeting = async (req, res) => {
   try {
-    const meeting = await Meeting.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const updateData = { ...req.body };
+    // If coreType is explicitly set to null or empty string, remove it
+    if (updateData.coreType === '' || updateData.coreType === null) {
+      updateData.coreType = null;
+    }
+    // const meeting = await Meeting.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const meeting = await Meeting.findByIdAndUpdate(
+      req.params.id, 
+      updateData, 
+      { new: true }
+    );
     
     // --- 🔔 NOTIFICATION LOGIC ---
     const recipientIds = await getMeetingRecipients(meeting);

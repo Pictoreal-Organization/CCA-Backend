@@ -30,6 +30,13 @@ const meetingSchema = new Schema({
   tags: { type: [String], default: [] },
   isPrivate: { type: Boolean, default: false },
   invitedMembers: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+  // ✅ NEW: Core type field
+  coreType: { 
+    type: String, 
+    enum: ['entire', 'be', 'te', null],
+    default: null 
+  },
+
   createdAt: { type: Date, default: Date.now }
 });
 
