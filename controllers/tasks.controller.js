@@ -2,7 +2,33 @@ const { Task, Team, User } = require('../models/index');
 const mongoose = require('mongoose');
 const admin = require('../config/firebase');
 
-// Reuse the helper logic
+// // Reuse the helper logic
+// const sendNotificationToUsers = async (userIds, title, body, data) => {
+//   try {
+//     const users = await User.find({ '_id': { $in: userIds } }).select('fcmTokens');
+//     let tokens = [];
+//     users.forEach(u => {
+//       if (u.fcmTokens && u.fcmTokens.length > 0) {
+//         tokens.push(...u.fcmTokens);
+//       }
+//     });
+
+//     if (tokens.length > 0) {
+//       await admin.messaging().sendEachForMulticast({
+//         tokens: tokens,
+//         data: {
+//           ...data,          // Your existing type/id data
+//           title: title,     // Move title here
+//           body: body        // Move body here
+//         }
+//       });
+//       console.log(`🔔 Silent Notification sent: ${title}`);
+//     }
+//   } catch (err) {
+//     console.error("❌ Notification Error:", err);
+//   }
+// };
+
 const sendNotificationToUsers = async (userIds, title, body, data) => {
   try {
     const users = await User.find({ '_id': { $in: userIds } }).select('fcmTokens');
@@ -13,16 +39,54 @@ const sendNotificationToUsers = async (userIds, title, body, data) => {
       }
     });
 
-    if (tokens.length > 0) {
-      await admin.messaging().sendEachForMulticast({
-        tokens: tokens,
-        data: {
-          ...data,          // Your existing type/id data
-          title: title,     // Move title here
-          body: body        // Move body here
+    // Remove duplicates
+    tokens = [...new Set(tokens.filter(t => t))];
+
+    if (tokens.length === 0) {
+      console.log("⚠️ No FCM tokens found for users");
+      return;
+    }
+
+    // ✅ CRITICAL FIX: Add notification object
+    const message = {
+      notification: {
+        title: title,
+        body: body,
+      },
+      data: {
+        ...data,
+        title: title,
+        body: body
+      },
+      android: {
+        notification: {
+          channelId: 'high_importance_channel',
+          priority: 'high',
+          sound: 'default',
+        }
+      },
+      apns: {
+        payload: {
+          aps: {
+            sound: 'default',
+            badge: 1,
+          }
+        }
+      },
+      tokens: tokens,
+    };
+
+    const response = await admin.messaging().sendEachForMulticast(message);
+    
+    console.log(`🔔 Notification sent: ${title}`);
+    console.log(`✅ Success: ${response.successCount}, ❌ Failed: ${response.failureCount}`);
+    
+    if (response.failureCount > 0) {
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success) {
+          console.log(`❌ Failed token ${idx}: ${resp.error?.message}`);
         }
       });
-      console.log(`🔔 Silent Notification sent: ${title}`);
     }
   } catch (err) {
     console.error("❌ Notification Error:", err);

@@ -48,7 +48,38 @@ const canUserControlMeeting = async (user, meeting) => {
   return false;
 };
 
-// Helper to send notifications
+// // Helper to send notifications
+// const sendFcmNotification = async (users, title, body, data) => {
+//   try {
+//     let allTokens = [];
+//     users.forEach(user => {
+//       if (user.fcmTokens && Array.isArray(user.fcmTokens)) {
+//         allTokens.push(...user.fcmTokens);
+//       }
+//     });
+    
+//     // Remove duplicates and nulls
+//     allTokens = [...new Set(allTokens.filter(t => t))];
+    
+//     if (allTokens.length === 0) return;
+
+//     const message = {
+//       data: {
+//         ...data,
+//         title: title,
+//         body: body
+//       },
+//       tokens: allTokens,
+//     };
+
+//     await admin.messaging().sendEachForMulticast(message);
+//     console.log(`🔔 Sent Data Notification for: ${title}`);
+//   } catch (error) {
+//     console.error("Error in sendFcmNotification:", error);
+//   }
+// };
+
+// Helper to send notifications (FIXED VERSION)
 const sendFcmNotification = async (users, title, body, data) => {
   try {
     let allTokens = [];
@@ -61,21 +92,56 @@ const sendFcmNotification = async (users, title, body, data) => {
     // Remove duplicates and nulls
     allTokens = [...new Set(allTokens.filter(t => t))];
     
-    if (allTokens.length === 0) return;
+    if (allTokens.length === 0) {
+      console.log("⚠️ No FCM tokens found for notification");
+      return;
+    }
 
+    // ✅ CRITICAL FIX: Add notification object for background delivery
     const message = {
+      notification: {
+        title: title,
+        body: body,
+      },
       data: {
         ...data,
+        // Keep title/body in data too for custom handling if needed
         title: title,
         body: body
+      },
+      android: {
+        notification: {
+          channelId: 'high_importance_channel',
+          priority: 'high',
+          sound: 'default',
+        }
+      },
+      apns: {
+        payload: {
+          aps: {
+            sound: 'default',
+            badge: 1,
+          }
+        }
       },
       tokens: allTokens,
     };
 
-    await admin.messaging().sendEachForMulticast(message);
-    console.log(`🔔 Sent Data Notification for: ${title}`);
+    const response = await admin.messaging().sendEachForMulticast(message);
+    
+    console.log(`🔔 Notification sent: ${title}`);
+    console.log(`✅ Success: ${response.successCount}, ❌ Failed: ${response.failureCount}`);
+    
+    // Log failed tokens for debugging
+    if (response.failureCount > 0) {
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success) {
+          console.log(`❌ Failed token ${idx}: ${resp.error?.message}`);
+        }
+      });
+    }
   } catch (error) {
-    console.error("Error in sendFcmNotification:", error);
+    console.error("❌ Error in sendFcmNotification:", error);
   }
 };
 
