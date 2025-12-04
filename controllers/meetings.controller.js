@@ -39,6 +39,17 @@ const canUserControlMeeting = async (user, meeting) => {
           return true;
         }
       }
+      
+      if (meeting.team && meeting.team.length > 0) {
+        const isHeadOfMeetingTeam = await Team.findOne({
+          _id: { $in: meeting.team },  // Any team in the meeting's team array
+          heads: userId                 // Check if YOU are the head
+        });
+
+        if (isHeadOfMeetingTeam) {
+          return true;
+        }
+      }
     } catch (error) {
       console.error("Error in Team Head check:", error);
     }
