@@ -6,9 +6,10 @@ const canUserControlMeeting = async (user, meeting) => {
   if (!user || !meeting) return false;
 
   const userId = user._id.toString();
+  const userRole = user.role?.name || user.role;
 
   // 1. Admin Check
-  if (user.role === "Admin") return true;
+  if (userRole === "Admin") return true;
 
   // 2. Organizer Check (Self)
   const organizerId = meeting.organizer?._id 
@@ -18,27 +19,10 @@ const canUserControlMeeting = async (user, meeting) => {
   if (organizerId === userId) return true;
 
   // 3. Head Logic (Strict Team Ownership)
-  if (user.role === "Head") {
+  if (userRole === "Head") {
     try {
-      // A. Fetch the Organizer's User Profile to find their teams
-      const organizerUser = await User.findById(organizerId);
-
-      if (organizerUser && organizerUser.team && organizerUser.team.length > 0) {
-        
-        // B. Check if YOU are a Head of ANY team the Organizer belongs to.
-        // Logic: Find a team where:
-        // 1. The ID matches one of the Organizer's teams.
-        // 2. YOUR ID is inside the 'heads' array of that team.
-        const isHeadOfOrganizerTeam = await Team.findOne({
-          _id: { $in: organizerUser.team }, // Teams the organizer is in
-          heads: userId                     // Check if YOU are the head
-        });
-
-        if (isHeadOfOrganizerTeam) {
-          // console.log(`✅ Access Granted: You are a Head of the Organizer's Team.`);
-          return true;
-        }
-      }
+      // STRICT RULE: Head can ONLY control if they are the Head of the MEETING'S team.
+      // (Ignoring whether they are the head of the organizer's team)
       
       if (meeting.team && meeting.team.length > 0) {
         const isHeadOfMeetingTeam = await Team.findOne({
@@ -52,6 +36,38 @@ const canUserControlMeeting = async (user, meeting) => {
       }
     } catch (error) {
       console.error("Error in Team Head check:", error);
+    }
+    // If not head of meeting team, FALL THROUGH to return false.
+  }
+
+  // 4. Coordinator Logic
+  if (userRole === "Coordinator") {
+    try {
+      // Must have a tag match
+      if (user.tag && meeting.tags && meeting.tags.includes(user.tag.name)) {
+        
+        // Fetch Organizer to check role
+        // (Organizer might be populated or just ID)
+        let organizerRole = "Member";
+        if (meeting.organizer && meeting.organizer.role) {
+           organizerRole = meeting.organizer.role.name || meeting.organizer.role;
+        } else {
+           const organizerUser = await User.findById(organizerId).populate('role');
+           if (organizerUser) {
+             organizerRole = organizerUser.role.name || organizerUser.role; // Handle object or string
+           }
+        }
+
+        // Allow if organizer is Coordinator, Admin, or Self. 
+        // Deny if Organizer is "Head"
+        if (organizerRole === "Head") {
+          return false; 
+        }
+        
+        return true;
+      }
+    } catch (error) {
+       console.error("Error in Coordinator check:", error);
     }
   }
 
@@ -281,7 +297,9 @@ exports.createMeeting = async (req, res) => {
       ...meetingData, 
       organizer: req.user._id,
       // ✅ Store coreType if it's a core meeting
-      coreType: coreType || null
+      coreType: coreType || null,
+      // 🔒 Coordinator Logic: Force Tag if assigned
+      tags: req.user.tag ? [req.user.tag.name] : meetingData.tags
     });
     
     await meeting.save();
@@ -329,6 +347,21 @@ exports.updateMeeting = async (req, res) => {
       updateData.coreType = null;
     }
     // const meeting = await Meeting.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const meetingToCheck = await Meeting.findById(req.params.id);
+    if (!meetingToCheck) return res.status(404).json({ msg: "Meeting not found" });
+
+    // 🔒 Coordinator Logic: Can only update if meeting has their tag
+    if (req.user.tag) {
+       const hasTag = meetingToCheck.tags && meetingToCheck.tags.includes(req.user.tag.name);
+       if (!hasTag) {
+         return res.status(403).json({ error: "Access Denied: You can only manage meetings associated with your tag." });
+       }
+       // Prevent changing tags? Or just ensure their tag stays? 
+       // For now, let's just force their tag to remain or be the only one.
+       // User requirement: "He can't change it."
+       updateData.tags = [req.user.tag.name];
+    }
+
     const meeting = await Meeting.findByIdAndUpdate(
       req.params.id, 
       updateData, 
@@ -377,6 +410,14 @@ exports.deleteMeeting = async (req, res) => {
     const meeting = await Meeting.findById(req.params.id);
     if (!meeting) return res.status(404).json({ msg: "Not Found" });
 
+    // 🔒 Coordinator Logic
+    if (req.user.tag) {
+       const hasTag = meeting.tags && meeting.tags.includes(req.user.tag.name);
+       if (!hasTag) {
+         return res.status(403).json({ error: "Access Denied: You can only delete meetings associated with your tag." });
+       }
+    }
+
     // --- 🔔 NOTIFICATION LOGIC FIXED ---
     const recipientIds = await getMeetingRecipients(meeting);
     const targetIds = recipientIds.filter(id => id !== req.user._id.toString());
@@ -405,7 +446,7 @@ exports.deleteMeeting = async (req, res) => {
 exports.getAllMeetings = async (req, res) => {
   try {
     const userId = req.user._id.toString();
-    const userRole = req.user.role; 
+    const userRole = req.user.role?.name || req.user.role; 
 
     const meetings = await Meeting.find()
       .populate("team")
@@ -439,9 +480,18 @@ exports.getAllMeetings = async (req, res) => {
 exports.getUpcomingMeetings = async (req, res) => {
   try {
     const now = new Date();
-    const meetings = await Meeting.find({ dateTime: { $gte: now }, status: 'scheduled' })
+    let query = { dateTime: { $gte: now }, status: 'scheduled' };
+    
+    // 🔒 Coordinator Logic: Filter by tag
+    // req.user.role is populated, so check .name
+    if (req.user.role && req.user.role.name === 'Coordinator' && req.user.tag) {
+      query.tags = req.user.tag.name;
+    }
+    
+    const meetings = await Meeting.find(query)
       .populate("organizer")
       .sort({ dateTime: 1 });
+      
     const result = await Promise.all(meetings.map(async (meeting) => {
       const canControl = await canUserControlMeeting(req.user, meeting);
       
@@ -465,7 +515,15 @@ exports.getAllMeetingsByStatus = async (req, res) => {
     if (!['scheduled', 'ongoing', 'completed', 'cancelled'].includes(status)) {
       return res.status(400).json({ error: 'Invalid status value' });
     }
-    const meetings = await Meeting.find({ status }).populate("organizer").sort({ dateTime: 1 });
+    
+    let query = { status };
+    
+    // 🔒 Coordinator Logic: Filter by tag
+    if (req.user.role && req.user.role.name === 'Coordinator' && req.user.tag) {
+      query.tags = req.user.tag.name;
+    }
+    
+    const meetings = await Meeting.find(query).populate("organizer").sort({ dateTime: 1 });
     const result = await Promise.all(meetings.map(async (meeting) => {
       const canControl = await canUserControlMeeting(req.user, meeting);
       
@@ -504,7 +562,7 @@ exports.getMeetingsByStatus = async (req, res) => {
       .populate('organizer', '_id name email');
 
     const userIdStr = req.user._id.toString();
-    const userRole = req.user.role;
+    const userRole = req.user.role?.name || req.user.role;
 
     const visibleMeetings = meetings.filter(meeting => {
         // Creator always sees their meeting
@@ -512,6 +570,13 @@ exports.getMeetingsByStatus = async (req, res) => {
         
         const hasTeam = meeting.team && meeting.team.length > 0; 
         const isPrivate = meeting.isPrivate;
+
+        // 🔒 Coordinator Logic: Can see meetings with their tag
+        if (userRole === 'Coordinator' && req.user.tag) {
+          if (meeting.tags && meeting.tags.includes(req.user.tag.name)) {
+            return true;
+          }
+        }
 
         // Public & No Team -> Everyone sees
         if (!isPrivate && !hasTeam) return true;

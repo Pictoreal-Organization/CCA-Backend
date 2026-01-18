@@ -24,7 +24,7 @@ exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).populate('role');
     if (!user) return res.status(400).json({ msg: 'Invalid credentials' });
 
     const isMatch = await user.comparePassword(password);
@@ -123,7 +123,7 @@ exports.googleLogin = async (req, res) => {
     console.log(`✅ Authenticated user: ${email}`);
 
     // Check if user exists in DB
-    let user = await User.findOne({ email });
+    let user = await User.findOne({ email }).populate('role');
 
     if (!user) {
       return res.status(401).json({ 

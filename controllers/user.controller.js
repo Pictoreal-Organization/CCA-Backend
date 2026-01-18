@@ -31,8 +31,10 @@ exports.updateUserProfile = async (req, res) => {
 
 exports.getAllUsers = async (req, res) => {
   try {
-    const users = await User.find({}, 'username name email rollNo role year division team avatar _id')
-    .populate('team', 'name _id'); // ✅ Include team data
+    const users = await User.find({}, 'username name email rollNo role year division team avatar tag _id')
+    .populate('team', 'name _id')
+    .populate('tag', 'name _id')
+    .populate('role', 'name'); // ✅ Populate Role
     res.json(users);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -48,7 +50,9 @@ exports.getLoggedInUser = async (req, res) => {
     // Re-fetch from DB to get latest data (optional)
     const freshUser = await User.findById(user._id)
       .select('-password -refreshToken -otp -otpExpiry')
-      .populate('team', 'name _id'); // ✅ Populate team data
+      .populate('team', 'name _id')
+      .populate('tag', 'name _id') // ✅ Populate Tag
+      .populate('role', 'name'); // Also populate role if it's a ref, just in case
 
     if (!freshUser) return res.status(404).json({ msg: 'User not found' });
 

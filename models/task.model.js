@@ -27,8 +27,10 @@ const taskSchema = new Schema({
   deadline: Date,
   completedAt: { type: Date, default: null },
   team: { type: Schema.Types.ObjectId, ref: 'Team', default: null },
-  organizerTeam: { type: Schema.Types.ObjectId, ref: 'Team', required: true },
-  subtasks: [subtaskSchema]
+  organizerTeam: { type: Schema.Types.ObjectId, ref: 'Team', required: false }, // Relaxing requirement as Coordinators might not have team?
+  organizer: { type: Schema.Types.ObjectId, ref: 'User' }, // ✅ Added for Coordinator logic
+  subtasks: [subtaskSchema],
+  tags: { type: [String], default: [] }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Task', taskSchema);

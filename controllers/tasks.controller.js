@@ -93,8 +93,10 @@ const sendNotificationToUsers = async (userIds, title, body, data) => {
   }
 };
 
-const hasTaskControl = async (userId, userRole, task) => {
+const hasTaskControl = async (userId, userRoleInput, task) => {
   try {
+    const userRole = userRoleInput?.name || userRoleInput;
+
     if (userRole === 'Admin') return true; // Admin always has control
 
     // Load teams to check heads
@@ -112,8 +114,37 @@ const hasTaskControl = async (userId, userRole, task) => {
     // User is head of task team?
     if (taskHeads.includes(userId.toString())) return true;
 
-    // User is head of organizer team?
-    if (organizerHeads.includes(userId.toString())) return true;
+    // User is head of organizer team? -> DISABLED per strict requirement
+    // if (organizerHeads.includes(userId.toString())) return true;
+
+    // 🔒 Coordinator Logic
+    if (userRole === "Coordinator") {
+      // Must match tag
+      const user = await User.findById(userId).populate('tag'); // Need tag details if not passed
+      const userTagName = user.tag ? user.tag.name : null;
+      
+      if (userTagName && task.tags && task.tags.includes(userTagName)) {
+        // Check Organizer Role
+        let organizerRole = "Member";
+        if (task.organizer) {
+           const orgUser = await User.findById(task.organizer).populate('role');
+           if (orgUser) organizerRole = orgUser.role.name || orgUser.role;
+        } else if (task.organizerTeam) {
+           // Fallback for old tasks: Assume Head created if it has organizerTeam?
+           // Actually, if created by Head, they are in 'organizerHeads'. 
+           // If I am NOT a head (Coordinator), I shouldn't touch it.
+           // Safe default: Deny legacy Head tasks.
+           return false; 
+        }
+
+         // Allow if organizer is Coordinator, Admin, or Self. 
+        // Deny if Organizer is "Head"
+        if (organizerRole === "Head") {
+          return false;
+        }
+        return true;
+      }
+    }
 
     return false;
   } catch (err) {
@@ -150,7 +181,11 @@ exports.createTask = async (req, res) => {
     const task = new Task({
       ...req.body,
       startDate: new Date(),
-      organizerTeam: userTeam
+      // ✅ Handle team being an array (take first) or single value
+      organizerTeam: Array.isArray(userTeam) ? (userTeam[0] || null) : (userTeam || null),
+      organizer: req.user._id, // ✅ Save Creator
+      // 🔒 Coordinator Logic: Force Tag if assigned
+      tags: req.user.tag ? [req.user.tag.name] : req.body.tags
     });
     await task.save();
 
@@ -175,6 +210,18 @@ exports.createTask = async (req, res) => {
 
 exports.updateTask = async (req, res) => {
   try {
+    const taskToCheck = await Task.findById(req.params.id);
+    if (!taskToCheck) return res.status(404).json({ error: "Task not found" });
+
+    // 🔒 Coordinator Logic
+    if (req.user.tag) {
+       const hasTag = taskToCheck.tags && taskToCheck.tags.includes(req.user.tag.name);
+       if (!hasTag) {
+         return res.status(403).json({ error: "Access Denied: You can only manage tasks associated with your tag." });
+       }
+       req.body.tags = [req.user.tag.name];
+    }
+
     const task = await Task.findByIdAndUpdate(req.params.id, req.body, { new: true });
 
     // --- 🔔 NOTIFICATION: Task Edited (General) ---
@@ -379,6 +426,74 @@ exports.getTasksByUser = async (req, res) => {
   }
 };
 
+// ✅ NEW: Get tasks managed by Coordinator (created by them or other Coordinators with same tag)
+exports.getManagedTasks = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).populate('tag').populate('role');
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Only for Coordinators
+    const userRole = user.role?.name || user.role;
+    if (userRole !== 'Coordinator') {
+      return res.status(403).json({ error: 'This endpoint is only for Coordinators' });
+    }
+
+    const userTag = user.tag?.name;
+    if (!userTag) {
+      return res.status(400).json({ error: 'Coordinator must have a tag assigned' });
+    }
+
+    // Find tasks where:
+    // 1. Created by this user, OR
+    // 2. Created by another Coordinator with the same tag
+    const tasks = await Task.find({
+      status: { $ne: 'Completed' },
+      tags: userTag, // Must have the coordinator's tag
+    })
+    .populate({
+      path: 'organizer',
+      select: 'name role tag',
+      populate: { path: 'role' }
+    })
+    .populate('team')
+    .populate('subtasks.assignedTo')
+    .sort({ deadline: 1 });
+
+    // Filter to only include tasks created by Coordinators (not Heads)
+    const managedTasks = tasks.filter(task => {
+      if (!task.organizer) return false;
+      
+      const organizerRole = task.organizer.role?.name || task.organizer.role;
+      
+      // Include if created by this user
+      if (task.organizer._id.toString() === user._id.toString()) return true;
+      
+      // Include if created by another Coordinator (not Head)
+      if (organizerRole === 'Coordinator') return true;
+      
+      // Exclude if created by Head
+      return false;
+    });
+
+    // Add control flag
+    const result = await Promise.all(managedTasks.map(async (task) => {
+      const canControl = await hasTaskControl(user._id, user.role, task);
+      return {
+        ...task.toObject(),
+        canControl
+      };
+    }));
+
+    res.status(200).json(result);
+  } catch (err) {
+    console.error('getManagedTasks error:', err);
+    res.status(500).json({ error: 'Failed to fetch managed tasks' });
+  }
+};
+
 
 exports.getTasksByStatus = async (req, res) => {
   try {
@@ -460,6 +575,17 @@ exports.getCompletedTasksByTeam = async (req, res) => {
 
 exports.deleteTask = async (req, res) => {
   try {
+    const taskToCheck = await Task.findById(req.params.id);
+    if (!taskToCheck) return res.status(404).json({ message: 'Task not found' });
+
+    // 🔒 Coordinator Logic
+    if (req.user.tag) {
+       const hasTag = taskToCheck.tags && taskToCheck.tags.includes(req.user.tag.name);
+       if (!hasTag) {
+         return res.status(403).json({ error: "Access Denied: You can only delete tasks associated with your tag." });
+       }
+    }
+
     const task = await Task.findByIdAndDelete(req.params.id);
     if (!task) return res.status(404).json({ message: 'Task not found' });
 

@@ -27,6 +27,7 @@ const adminRoutes = require('./routes/admin.route');
 const attendanceRoutes = require('./routes/attendance.route');
 const teamRoutes = require('./routes/team.route');
 const tagRoutes = require('./routes/tags.route');
+const roleRoutes = require('./routes/role.routes');
 
 app.use('/api/meetings/', meetingRoutes);
 app.use('/api/tasks/', taskRoutes);
@@ -36,6 +37,7 @@ app.use('/api/admin/', adminRoutes);
 app.use('/api/attendance/', attendanceRoutes);
 app.use('/api/teams/', teamRoutes);
 app.use('/api/tags/', tagRoutes);
+app.use('/api/roles/', roleRoutes);
 
 // for swagger
 app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerFile));

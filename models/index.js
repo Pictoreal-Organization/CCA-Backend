@@ -4,6 +4,7 @@ module.exports = {
   Task: require('./task.model'),
   Meeting: require('./meeting.model'),
   Team: require('./team.model'),
-  Tag: require('./tag.model')
+  Tag: require('./tag.model'),
+  Role: require('./role.model')
 };
   

@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
-const { User, Team, Meeting, Task } = require('../models/index');
+const { User, Team, Meeting, Task, Role } = require('../models/index');
 const bcrypt = require('bcrypt');
 
 exports.createAdmin = async (req, res) => {
@@ -13,13 +13,16 @@ exports.createAdmin = async (req, res) => {
       const existingUser = await User.findOne({ email });
       if (existingUser) return res.status(400).json({ msg: "Admin already exists" });
   
+      const role = await Role.findOne({ slug: 'admin' });
+      if (!role) return res.status(500).json({ msg: "Admin Role not found in DB" });
+
       const hashedPassword = await bcrypt.hash(password, 10);
   
       const admin = new User({
         username,
         email,
         password,
-        role: 'Admin',
+        role: role._id,
         initialPassword: password,
         passwordChanged: false
       });
@@ -74,6 +77,9 @@ exports.adminCreateMember = async (req, res) => {
     const existingUser = await User.findOne({ email });
     if (existingUser) return res.status(400).json({ msg: "User already exists" });
 
+    const role = await Role.findOne({ slug: 'member' });
+    if (!role) return res.status(500).json({ msg: "Member Role not found in DB" });
+
     // Create Member User
     const user = new User({
       username,
@@ -83,7 +89,7 @@ exports.adminCreateMember = async (req, res) => {
       year,
       division,
       phone,
-      role: 'Member',
+      role: role._id,
       password: username,
       initialPassword: username,
       passwordChanged: false,
@@ -127,11 +133,24 @@ exports.adminCreateHead = async (req, res) => {
     const existingUser = await User.findOne({ email });
     if (existingUser) return res.status(400).json({ msg: "User already exists" });
 
+    // Use Head role OR Coordinator role. Assuming 'Head' = 'Coordinator' in new system or separate?
+    // User said "Coordinator logic", but 'Head' exists in logs. Let's assume 'head' slug exists or map to 'coordinator'.
+    // Actually, earlier seeding created 'admin' and 'coordinator'. Is there a 'head' role?
+    // Let's use 'coordinator' for heads if 'head' role doesn't exist, OR strictly 'head'.
+    // Given 'Coordinator' tag constraints, 'Head' might be mapped to 'Coordinator'.
+    // Checking setup_test_data.js... it used 'coordinator'.
+    // Checking importCoreTeam.js... it used 'Head'.
+    // I should check Role collection for 'head'. If not found, use 'coordinator'.
+
+    let role = await Role.findOne({ slug: 'head' });
+    if (!role) role = await Role.findOne({ slug: 'coordinator' });
+    if (!role) return res.status(500).json({ msg: "Head/Coordinator Role not found" });
+
     // Create Head User
     const user = new User({
       username,
       email,
-      role: 'Head',
+      role: role._id, // Assign obtained role ID
       name: name ? name : "",
       password: username,
       initialPassword: username,
@@ -164,10 +183,17 @@ exports.deleteUser = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const deletedUser = await User.findOneAndDelete({ _id: userId });
-    if (!deletedUser) return res.status(404).json({ msg: "User not found" });
+    const userToDelete = await User.findById(userId).populate('role');
+    if (!userToDelete) return res.status(404).json({ msg: "User not found" });
 
-    res.json({ msg: `${deletedUser.role} deleted successfully and removed from teams. `});
+    // Protect Admin Role
+    if (userToDelete.role && (userToDelete.role.name === 'Admin' || userToDelete.role === 'Admin')) {
+        return res.status(403).json({ msg: "Cannot delete an Admin user." });
+    }
+
+    const deletedUser = await User.findOneAndDelete({ _id: userId });
+    
+    res.json({ msg: `User deleted successfully and removed from teams.`});
   } catch (err) {
     console.error("Error deleting user:", err);
     res.status(500).json({ error: err.message });
@@ -193,7 +219,10 @@ exports.updateTeamHead = async (req, res) => {
 
 exports.getAllMembers = async (req, res) => {
   try {
-    const members = await User.find({ role: 'Member' }).populate('team');
+    const role = await Role.findOne({ slug: 'member' });
+    const query = role ? { role: role._id } : { role: 'Member' }; // Fallback if role is mixed
+
+    const members = await User.find(query).populate('team').populate('role');
     res.json(members);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -202,8 +231,20 @@ exports.getAllMembers = async (req, res) => {
 
 exports.getAllHeads = async (req, res) => {
   try {
-    const heads = await User.find({ role: 'Head' }).populate('team');
-    res.json(heads);
+    // Try to find Head role, or Coordinator role
+    // This logic might need refinement depending on strict requirements
+    const headRole = await Role.findOne({ slug: 'head' });
+    const coordRole = await Role.findOne({ slug: 'coordinator' });
+    
+    // Construct query to find users with either role
+    const roleIds = [];
+    if (headRole) roleIds.push(headRole._id);
+    if (coordRole) roleIds.push(coordRole._id);
+
+    const query = roleIds.length > 0 ? { role: { $in: roleIds } } : { role: 'Head' };
+
+    const users = await User.find(query).populate('team').populate('role');
+    res.json(users);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -238,7 +279,7 @@ exports.getVisibleTeams = async (req, res) => {
 
 exports.getAllMeetings = async (req, res) => {
   try {
-    const meetings = await Meeting.find().populate('organizer team');
+    const meetings = await Meeting.find().populate('organizer team tags');
     res.json(meetings);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -247,7 +288,7 @@ exports.getAllMeetings = async (req, res) => {
 
 exports.getAllTasks = async (req, res) => {
   try {
-    const tasks = await Task.find().populate('team subtasks.assignedTo');
+    const tasks = await Task.find().populate('team subtasks.assignedTo tags');
     res.json(tasks);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -256,13 +297,19 @@ exports.getAllTasks = async (req, res) => {
 
 exports.getAllUsersForAdmin = async (req, res) => {
   try {
-    const users = await User.find({}, 'username name email role year division initialPassword passwordChanged rollNo');
+    const users = await User.find({}, 'username name email role year division initialPassword passwordChanged rollNo team tag')
+                            .populate('role') // Populate role for name access
+                            .populate('team') // Populate team for display
+                            .populate('tag'); // Populate tag for Coordinators
+
     const formatted = users.map(u => ({
       _id: u._id,
       username: u.username,
       name: u.name,
       email: u.email,
-      role: u.role,
+      role: u.role?.name || u.role, // Handle Object or String
+      team: u.team, // Pass populated team array/object
+      tag: u.tag, // Pass populated tag
       password: u.passwordChanged ? "Hidden" : u.initialPassword,
       year: u.year,
       division: u.division,
@@ -278,7 +325,7 @@ exports.getSingleMember = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const member = await User.findById(id).populate('team');
+    const member = await User.findById(id).populate('team').populate('role').populate('tag'); // Added populate tag
     if (!member) return res.status(404).json({ msg: "Member not found" });
 
     res.json(member);
@@ -293,8 +340,13 @@ exports.updateMember = async (req, res) => {
     const updates = req.body;
 
     // Fetch old member info
-    const oldMember = await User.findById(id);
+    const oldMember = await User.findById(id).populate('role');
     if (!oldMember) return res.status(404).json({ msg: "Member not found" });
+
+    // Protect Admin Role
+    if (oldMember.role && (oldMember.role.name === 'Admin' || oldMember.role === 'Admin')) {
+        return res.status(403).json({ msg: "Cannot edit an Admin user." });
+    }
 
     const oldTeams = oldMember.team || [];
     const newTeams = updates.team || [];

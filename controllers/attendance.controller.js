@@ -5,11 +5,37 @@ const canMarkAttendance = async (user, meeting) => {
 
   const userId = user._id.toString();
 
-  if (user.role === "Admin") return true;
+  const userRole = user.role?.name || user.role;
+  if (userRole === "Admin") return true;
 
   if (meeting.organizer && meeting.organizer.toString() === userId) return true;
 
-  if (user.role !== "Head") return false;
+  if (userRole === "Coordinator") {
+    // 1. Tag Check: Meeting must have user's tag
+    if (!user.tag || !meeting.tags || !meeting.tags.includes(user.tag.name)) {
+      return false;
+    }
+
+    // 2. Organizer Check: Organizer must be a Coordinator with the same tag
+    // We need to fetch organizer details (Role & Tag)
+    const organizer = await User.findById(meeting.organizer)
+      .populate('role')
+      .populate('tag');
+      
+    if (!organizer) return false;
+
+    const organizerRole = organizer.role?.name || organizer.role;
+    
+    // Must be Coordinator
+    if (organizerRole !== 'Coordinator') return false;
+
+    // Must have same tag
+    if (!organizer.tag || organizer.tag.name !== user.tag.name) return false;
+
+    return true;
+  }
+
+  if (userRole !== "Head") return false;
 
   if (meeting.team && meeting.team.length > 0) {
     const teams = await Team.find({ _id: { $in: meeting.team } });
