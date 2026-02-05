@@ -203,6 +203,18 @@ const getMeetingRecipients = async (meeting) => {
   };
 
   // ---------------------------------------------------------
+  // Case 0: Core Meeting (Pre-calculated list)
+  // If coreType is set, we strictly honor the invitedMembers list.
+  // This allows the FE to decide exactly who gets it (add/remove).
+  // ---------------------------------------------------------
+  if (meeting.coreType) {
+     if (meeting.invitedMembers && meeting.invitedMembers.length > 0) {
+       meeting.invitedMembers.forEach(m => recipientIds.add(m.toString()));
+     }
+     return Array.from(recipientIds);
+  }
+
+  // ---------------------------------------------------------
   // Case 1: Team meeting (Public)
   // Recipients: All heads + Only specific team members + Specific team heads
   // ---------------------------------------------------------
@@ -632,7 +644,11 @@ exports.getMeetingsByStatus = async (req, res) => {
 // --- 8. GET BY ID ---
 exports.getMeetingById = async (req, res) => {
   try {
-    const meeting = await Meeting.findById(req.params.id);
+    const meeting = await Meeting.findById(req.params.id)
+      .populate('invitedMembers', 'name email rollNo') // Populate invited members
+      .populate('team')
+      .populate('organizer', 'name email');
+      
     if (!meeting) return res.status(404).json({ message: "Meeting not found" });
     res.status(200).json(meeting);
   } catch (err) {
