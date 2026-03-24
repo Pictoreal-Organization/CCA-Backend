@@ -25,6 +25,9 @@ router.get('/members/:id', authMiddleware, adminOnly, adminController.getSingleM
 // Update member
 router.put('/members/:id', authMiddleware, adminOnly, adminController.updateMember);
 
+// Update role
+router.put('/users/bulk-change-role', authMiddleware, adminOnly, adminController.bulkChangeRole);
+
 // Sync members from Google Sheet
 router.post('/sync-members-from-sheet', authMiddleware, adminOnly, adminController.syncMembersFromSheet);
 router.get('/sync-status', authMiddleware, adminOnly, adminController.getSyncStatus);  // ← add this

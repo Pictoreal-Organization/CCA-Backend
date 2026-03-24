@@ -382,6 +382,95 @@ exports.updateMember = async (req, res) => {
   }
 };
 
+exports.bulkChangeRole = async (req, res) => {
+  try {
+    const { userIds, targetRoleSlug, tagId, teamIds } = req.body;
+
+    if (!Array.isArray(userIds) || userIds.length === 0)
+      return res.status(400).json({ msg: "userIds array is required" });
+    if (!targetRoleSlug)
+      return res.status(400).json({ msg: "targetRoleSlug is required" });
+
+    const targetRole = await Role.findOne({ slug: targetRoleSlug });
+    if (!targetRole) return res.status(404).json({ msg: "Target role not found" });
+
+    for (const userId of userIds) {
+      const user = await User.findById(userId).populate('role');
+      if (!user) continue;
+
+      const currentSlug = user.role?.slug;
+
+      // ── Changing TO coordinator ──────────────────────────────
+      if (targetRoleSlug === 'coordinator') {
+        if (!tagId) return res.status(400).json({ msg: "tagId required for coordinator role" });
+        await User.findByIdAndUpdate(userId, {
+          role: targetRole._id,
+          tag: tagId
+        });
+      }
+
+      // ── Changing TO head ─────────────────────────────────────
+      else if (targetRoleSlug === 'head') {
+        if (!Array.isArray(teamIds) || teamIds.length === 0)
+          return res.status(400).json({ msg: "teamIds required for head role" });
+
+        // If was a member, remove from members arrays
+        if (currentSlug === 'member') {
+          await Team.updateMany(
+            { _id: { $in: user.team } },
+            { $pull: { members: userId } }
+          );
+        }
+
+        // Add to heads array in each team
+        await Team.updateMany(
+          { _id: { $in: teamIds } },
+          { $addToSet: { heads: userId } }
+        );
+
+        // Merge new teamIds into user's existing teams
+        const existingTeamIds = user.team.map(String);
+        const newTeamIds = teamIds.filter(id => !existingTeamIds.includes(String(id)));
+        const mergedTeams = [...existingTeamIds, ...newTeamIds];
+
+        await User.findByIdAndUpdate(userId, {
+          role: targetRole._id,
+          team: mergedTeams
+        });
+      }
+
+      // ── Changing TO member ───────────────────────────────────
+      else if (targetRoleSlug === 'member') {
+        // If was a head, remove from heads arrays, add to members
+        if (currentSlug === 'head' || currentSlug === 'coordinator') {
+          await Team.updateMany(
+            { _id: { $in: user.team } },
+            {
+              $pull: { heads: userId },
+              $addToSet: { members: userId }
+            }
+          );
+        }
+
+        await User.findByIdAndUpdate(userId, {
+          role: targetRole._id,
+          $unset: { tag: "" }
+        });
+      }
+
+      // ── Any other role (generic) ─────────────────────────────
+      else {
+        await User.findByIdAndUpdate(userId, { role: targetRole._id });
+      }
+    }
+
+    res.json({ msg: `${userIds.length} user(s) changed to ${targetRole.name}` });
+  } catch (err) {
+    console.error("bulkChangeRole error:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
 // In-memory store for sync status (fine for single-instance servers)
 const syncStatus = {
   running: false,
