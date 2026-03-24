@@ -382,292 +382,152 @@ exports.updateMember = async (req, res) => {
   }
 };
 
-// exports.syncMembersFromSheet = async (req, res) => {
-//   const SHEET_ID = '1m93qxzXLo1bS1Oo29WzOU0nVQCUq2wyFvN6X48Z_MRQ';
-//   const GID = '1763042882';
-//   const csvUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`;
+// In-memory store for sync status (fine for single-instance servers)
+const syncStatus = {
+  running: false,
+  lastRun: null,
+  result: null,
+  error: null
+};
 
-//   const summary = { added: [], updated: [], skipped: [], errors: [] };
-
-//   try {
-//     // 1. Fetch CSV
-//     const response = await axios.get(csvUrl, { responseType: 'arraybuffer' });
-//     const csvString = Buffer.from(response.data).toString('utf-8');
-
-//     // 2. Parse CSV
-//     const results = await new Promise((resolve, reject) => {
-//       const rows = [];
-//       const readable = Readable.from(csvString);
-//       readable
-//         .pipe(csv())
-//         .on('data', (data) => rows.push(data))
-//         .on('end', () => resolve(rows))
-//         .on('error', reject);
-//     });
-
-//     // 3. Find member role once
-//     const memberRole = await Role.findOne({ slug: 'member' });
-//     if (!memberRole) return res.status(500).json({ msg: "Member role not found in DB" });
-
-//     // 4. Helper to find the value of a column by partial/case-insensitive key match
-//     // Needed because Google Form headers have newlines and trailing spaces
-//     const getField = (row, keyword) => {
-//       const key = Object.keys(row).find(k =>
-//         k.toLowerCase().replace(/\s+/g, ' ').trim().includes(keyword.toLowerCase())
-//       );
-//       return key ? row[key]?.trim() : undefined;
-//     };
-
-//     // 5. Upsert each row
-//     for (const row of results) {
-//       const email = getField(row, 'email')?.toLowerCase();
-
-//       if (!email) {
-//         summary.skipped.push({ reason: 'Missing email', row });
-//         continue;
-//       }
-
-//       try {
-//         const name       = getField(row, 'name');
-//         const phone      = getField(row, 'mobile')?.replace(/\D/g, '');
-//         const rollNo     = getField(row, 'roll');
-//         const year       = getField(row, 'year');
-//         const department = getField(row, 'department');
-
-//         // Two team columns from the Google Form
-//         const teams1Raw  = getField(row, 'select one or more');
-//         const teams2Raw  = getField(row, 'select other');
-
-//         const teams1 = teams1Raw?.split(',').map(t => t.trim()).filter(Boolean) || [];
-//         const teams2 = teams2Raw?.split(',').map(t => t.trim()).filter(Boolean) || [];
-//         const allTeams = [...new Set([...teams1, ...teams2])];
-
-//         const username        = email.split('@')[0];
-//         const initialPassword = username;
-
-//         // Upsert user
-//         let user  = await User.findOne({ email });
-//         let isNew = false;
-
-//         if (user) {
-//           user.username = username;
-//           user.name     = name       || user.name;
-//           user.rollNo   = rollNo     || user.rollNo;
-//           user.year     = year       || user.year;
-//           user.division = department || user.division;
-//           user.phone    = phone      || user.phone;
-//           user.role     = memberRole._id;
-//           if (!user.initialPassword) user.initialPassword = initialPassword;
-//         } else {
-//           isNew = true;
-//           user = new User({
-//             username,
-//             email,
-//             password: initialPassword,
-//             name,
-//             rollNo,
-//             year,
-//             division: department,
-//             phone,
-//             initialPassword,
-//             passwordChanged: false,
-//             role: memberRole._id,
-//             fcmTokens: [],
-//             team: [],
-//           });
-//         }
-
-//         await user.save();
-
-//         // Sync teams — case-insensitive match to avoid "Editorial team" vs "Editorial Team" duplicates
-//         for (const teamName of allTeams) {
-//           if (!teamName) continue;
-
-//           let team = await Team.findOne({ name: new RegExp(`^${teamName}$`, 'i') });
-//           if (!team) {
-//             team = await Team.create({ name: teamName });
-//           }
-
-//           await Team.updateOne(
-//             { _id: team._id },
-//             { $addToSet: { members: user._id } }
-//           );
-
-//           if (!user.team.map(String).includes(String(team._id))) {
-//             user.team.push(team._id);
-//           }
-//         }
-
-//         await user.save();
-
-//         if (isNew) summary.added.push(email);
-//         else summary.updated.push(email);
-
-//       } catch (rowErr) {
-//         summary.errors.push({ email, error: rowErr.message });
-//       }
-//     }
-
-//     return res.json({
-//       msg: 'Sync complete',
-//       added:   summary.added.length,
-//       updated: summary.updated.length,
-//       skipped: summary.skipped.length,
-//       errors:  summary.errors.length,
-//       details: summary
-//     });
-
-//   } catch (err) {
-//     console.error('Sheet sync error:', err.message);
-//     return res.status(500).json({ error: err.message });
-//   }
-// };
-
-
-
-exports.syncMembersFromSheet = async (req, res) => {
+// Extracted sync logic (no req/res — runs in background)
+async function doSyncWork() {
   const SHEET_ID = '1m93qxzXLo1bS1Oo29WzOU0nVQCUq2wyFvN6X48Z_MRQ';
   const GID = '1763042882';
   const csvUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`;
   const summary = { added: [], updated: [], skipped: [], errors: [] };
 
-  try {
-    // 1. Fetch + parse CSV
-    const response = await axios.get(csvUrl, { responseType: 'arraybuffer' });
-    const csvString = Buffer.from(response.data).toString('utf-8');
+  const response = await axios.get(csvUrl, { responseType: 'arraybuffer' });
+  const csvString = Buffer.from(response.data).toString('utf-8');
 
-    const results = await new Promise((resolve, reject) => {
-      const rows = [];
-      Readable.from(csvString)
-        .pipe(csv())
-        .on('data', (d) => rows.push(d))
-        .on('end', () => resolve(rows))
-        .on('error', reject);
-    });
+  const results = await new Promise((resolve, reject) => {
+    const rows = [];
+    Readable.from(csvString)
+      .pipe(csv())
+      .on('data', (d) => rows.push(d))
+      .on('end', () => resolve(rows))
+      .on('error', reject);
+  });
 
-    // 2. Get member role
-    const memberRole = await Role.findOne({ slug: 'member' });
-    if (!memberRole) return res.status(500).json({ msg: "Member role not found in DB" });
+  const memberRole = await Role.findOne({ slug: 'member' });
+  if (!memberRole) throw new Error('Member role not found in DB');
 
-    // 3. Helper: partial/case-insensitive column key match
-    const getField = (row, keyword) => {
-      const key = Object.keys(row).find(k =>
-        k.toLowerCase().replace(/\s+/g, ' ').trim().includes(keyword.toLowerCase())
-      );
-      return key ? row[key]?.trim() : undefined;
-    };
+  const getField = (row, keyword) => {
+    const key = Object.keys(row).find(k =>
+      k.toLowerCase().replace(/\s+/g, ' ').trim().includes(keyword.toLowerCase())
+    );
+    return key ? row[key]?.trim() : undefined;
+  };
 
-    // 4. ✅ Pre-cache ALL existing teams into a Map (lowercase name → team doc)
-    //    ONE DB call instead of one per team per user
-    const allTeamDocs = await Team.find({});
-    const teamCache = new Map(allTeamDocs.map(t => [t.name.toLowerCase(), t]));
+  const allTeamDocs = await Team.find({});
+  const teamCache = new Map(allTeamDocs.map(t => [t.name.toLowerCase(), t]));
 
-    // Helper: get or create team (uses cache, only hits DB on miss)
-    const getOrCreateTeam = async (teamName) => {
-      const key = teamName.toLowerCase();
-      if (teamCache.has(key)) return teamCache.get(key);
+  const getOrCreateTeam = async (teamName) => {
+    const key = teamName.toLowerCase();
+    if (teamCache.has(key)) return teamCache.get(key);
+    const newTeam = await Team.create({ name: teamName });
+    teamCache.set(key, newTeam);
+    return newTeam;
+  };
 
-      // Not in cache — create it
-      const newTeam = await Team.create({ name: teamName });
-      teamCache.set(key, newTeam);
-      return newTeam;
-    };
+  const emails = results.map(row => getField(row, 'email')?.toLowerCase()).filter(Boolean);
+  const existingUsers = await User.find({ email: { $in: emails } });
+  const userCache = new Map(existingUsers.map(u => [u.email, u]));
 
-    // 5. ✅ Pre-cache ALL existing users by email (ONE DB call)
-    const emails = results
-      .map(row => getField(row, 'email')?.toLowerCase())
-      .filter(Boolean);
+  for (const row of results) {
+    const email = getField(row, 'email')?.toLowerCase();
+    if (!email) { summary.skipped.push({ reason: 'Missing email' }); continue; }
 
-    const existingUsers = await User.find({ email: { $in: emails } });
-    const userCache = new Map(existingUsers.map(u => [u.email, u]));
+    try {
+      const name       = getField(row, 'name');
+      const phone      = getField(row, 'mobile')?.replace(/\D/g, '');
+      const rollNo     = getField(row, 'roll');
+      const year       = getField(row, 'year');
+      const department = getField(row, 'department');
 
-    // 6. Process all rows — now mostly in-memory lookups, minimal DB calls
-    for (const row of results) {
-      const email = getField(row, 'email')?.toLowerCase();
-      if (!email) {
-        summary.skipped.push({ reason: 'Missing email', row });
-        continue;
+      const teams1 = getField(row, 'select one or more')?.split(',').map(t => t.trim()).filter(Boolean) || [];
+      const teams2 = getField(row, 'select other')?.split(',').map(t => t.trim()).filter(Boolean) || [];
+      const allTeams = [...new Set([...teams1, ...teams2])];
+
+      const username = email.split('@')[0];
+      let user  = userCache.get(email);
+      let isNew = false;
+
+      if (user) {
+        user.username = username;
+        user.name     = name       || user.name;
+        user.rollNo   = rollNo     || user.rollNo;
+        user.year     = year       || user.year;
+        user.division = department || user.division;
+        user.phone    = phone      || user.phone;
+        user.role     = memberRole._id;
+        if (!user.initialPassword) user.initialPassword = username;
+      } else {
+        isNew = true;
+        user = new User({
+          username, email,
+          password: username, name, rollNo, year,
+          division: department, phone,
+          initialPassword: username,
+          passwordChanged: false,
+          role: memberRole._id,
+          fcmTokens: [], team: [],
+        });
       }
 
-      try {
-        const name       = getField(row, 'name');
-        const phone      = getField(row, 'mobile')?.replace(/\D/g, '');
-        const rollNo     = getField(row, 'roll');
-        const year       = getField(row, 'year');
-        const department = getField(row, 'department');
+      await user.save();
 
-        const teams1 = getField(row, 'select one or more')?.split(',').map(t => t.trim()).filter(Boolean) || [];
-        const teams2 = getField(row, 'select other')?.split(',').map(t => t.trim()).filter(Boolean) || [];
-        const allTeams = [...new Set([...teams1, ...teams2])];
+      const teamDocs = await Promise.all(allTeams.map(getOrCreateTeam));
+      await Promise.all(teamDocs.map(team =>
+        Team.updateOne({ _id: team._id }, { $addToSet: { members: user._id } })
+      ));
 
-        const username        = email.split('@')[0];
-        const initialPassword = username;
-
-        let user  = userCache.get(email);
-        let isNew = false;
-
-        if (user) {
-          user.username = username;
-          user.name     = name       || user.name;
-          user.rollNo   = rollNo     || user.rollNo;
-          user.year     = year       || user.year;
-          user.division = department || user.division;
-          user.phone    = phone      || user.phone;
-          user.role     = memberRole._id;
-          if (!user.initialPassword) user.initialPassword = initialPassword;
-        } else {
-          isNew = true;
-          user = new User({
-            username, email,
-            password: initialPassword,
-            name, rollNo, year,
-            division: department, phone,
-            initialPassword,
-            passwordChanged: false,
-            role: memberRole._id,
-            fcmTokens: [], team: [],
-          });
-        }
-
-        // ✅ Save user ONCE (not twice)
-        await user.save();
-
-        // Resolve all teams in parallel, then update in parallel
-        const teamDocs = await Promise.all(allTeams.map(getOrCreateTeam));
-
-        // ✅ All team membership updates in parallel
-        await Promise.all(teamDocs.map(team =>
-          Team.updateOne({ _id: team._id }, { $addToSet: { members: user._id } })
-        ));
-
-        // Update user.team array (in-memory, then one final save)
-        const existingTeamIds = user.team.map(String);
-        for (const team of teamDocs) {
-          if (!existingTeamIds.includes(String(team._id))) {
-            user.team.push(team._id);
-          }
-        }
-        await user.save();
-
-        if (isNew) summary.added.push(email);
-        else summary.updated.push(email);
-
-      } catch (rowErr) {
-        summary.errors.push({ email, error: rowErr.message });
+      const existingTeamIds = user.team.map(String);
+      for (const team of teamDocs) {
+        if (!existingTeamIds.includes(String(team._id))) user.team.push(team._id);
       }
+      await user.save();
+
+      if (isNew) summary.added.push(email);
+      else summary.updated.push(email);
+
+    } catch (rowErr) {
+      summary.errors.push({ email, error: rowErr.message });
     }
-
-    return res.json({
-      msg: 'Sync complete',
-      added:   summary.added.length,
-      updated: summary.updated.length,
-      skipped: summary.skipped.length,
-      errors:  summary.errors.length,
-      details: summary
-    });
-
-  } catch (err) {
-    console.error('Sheet sync error:', err.message);
-    return res.status(500).json({ error: err.message });
   }
+
+  return summary;
+}
+
+// POST /admin/sync-members-from-sheet — triggers sync, returns immediately
+exports.syncMembersFromSheet = async (req, res) => {
+  if (syncStatus.running) {
+    return res.status(409).json({ msg: 'Sync already in progress. Check /sync-status for updates.' });
+  }
+
+  syncStatus.running = true;
+  syncStatus.result  = null;
+  syncStatus.error   = null;
+
+  // Respond immediately — don't await the work
+  res.json({ msg: 'Sync started', status: 'running' });
+
+  // Fire and forget
+  doSyncWork()
+    .then(summary => {
+      syncStatus.running = false;
+      syncStatus.lastRun = new Date().toISOString();
+      syncStatus.result  = summary;
+      console.log('✅ Sheet sync complete:', summary.added.length, 'added,', summary.updated.length, 'updated');
+    })
+    .catch(err => {
+      syncStatus.running = false;
+      syncStatus.error   = err.message;
+      console.error('❌ Sheet sync failed:', err.message);
+    });
+};
+
+// GET /admin/sync-status — frontend polls this
+exports.getSyncStatus = (req, res) => {
+  res.json(syncStatus);
 };
