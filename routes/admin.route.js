@@ -25,5 +25,7 @@ router.get('/members/:id', authMiddleware, adminOnly, adminController.getSingleM
 // Update member
 router.put('/members/:id', authMiddleware, adminOnly, adminController.updateMember);
 
+// Sync members from Google Sheet
+router.post('/sync-members-from-sheet', authMiddleware, adminOnly, adminController.syncMembersFromSheet);
 
 module.exports = router;
