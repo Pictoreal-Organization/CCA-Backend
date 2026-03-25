@@ -518,10 +518,11 @@ exports.getCompletedTasksByUser = async (req, res) => {
     if (!userId) {
       return res.status(400).json({ error: 'User ID is required' });
     }
+    const userObjectId = new mongoose.Types.ObjectId(userId);
 
     const tasks = await Task.find({
       status: 'Completed',
-      'subtasks.assignedTo': userId,
+      'subtasks.assignedTo': userObjectId,
     }).sort({ deadline: -1 })
       .populate('team')
       .populate('subtasks.assignedTo'); 
